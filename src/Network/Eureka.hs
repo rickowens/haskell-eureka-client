@@ -6,15 +6,31 @@ import Control.Exception (bracket)
 
 data EurekaConfig = EurekaConfiguration {
       eurekaServerServiceUrls :: Map String [String]
+      -- ^ The URLs for Eureka, per availability zone.
+    , eurekaInstanceInfoReplicationInterval :: Int
+      -- ^ How often, in seconds, to push instance info to Eureka.
     }
 
 data InstanceConfig = InstanceConfig {
-      instanceSecurePortEnabled :: Bool
-    , instanceServiceUrlDefault :: String
+      instanceServiceUrlDefault :: String
+      -- ^ What URL to use to access the service.
     , instanceName :: String
-    , instancePort :: Int
+      -- ^ The name of the service.
+    , instanceNonSecurePortEnabled :: Bool
+      -- ^ True if this instance can be accessed over an insecure port.
+    , instanceSecurePortEnabled :: Bool
+      -- ^ True if this instance can be accessed over a secure port (https).
+    , instanceNonSecurePort :: Int
+      -- ^ Port number that you can use to access this instance if security
+      -- isn't a concern.
+    , instanceSecurePort :: Int
+      -- ^ Port number that you can use to access this instance securely.
     , instanceStatusPageUrl :: Maybe String
+      -- ^ URL to use to access this instance's status page.
     , instanceHomePageUrl :: String
+      -- ^ URL to use to access this instance's home page.
+    , instanceMetadata :: Map String String
+      --  ^ A map of metadata about this instance.
     }
 
 data EurekaConnection = EurekaConnection
