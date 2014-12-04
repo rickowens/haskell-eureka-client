@@ -14,6 +14,8 @@ data EurekaConfig = EurekaConfiguration {
 data InstanceConfig = InstanceConfig {
       instanceServiceUrlDefault :: String
       -- ^ What URL to use to access the service.
+    , instanceLeaseRenewalInterval :: Int
+      -- ^ How often, in seconds, to send heartbeat updates.
     , instanceName :: String
       -- ^ The name of the service.
     , instanceNonSecurePortEnabled :: Bool
@@ -31,6 +33,10 @@ data InstanceConfig = InstanceConfig {
       -- ^ URL to use to access this instance's home page.
     , instanceMetadata :: Map String String
       --  ^ A map of metadata about this instance.
+    , instanceEnabledOnInit :: Bool
+      -- ^ Whether the instance should be marked as "up" immediately.  Some
+      -- services might not be ready at startup, in which case this should be
+      -- false.
     }
 
 data EurekaConnection = EurekaConnection
