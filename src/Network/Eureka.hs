@@ -1,7 +1,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        defaultEurekaConfig, defaultInstanceConfig,
-                       EurekaConnection) where
+                       EurekaConnection, AvailabilityZone, Region) where
 
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
@@ -12,16 +12,25 @@ import Control.Monad.Fix (mfix)
 import System.Locale (defaultTimeLocale)
 import qualified Data.Map as Map
 
+type AvailabilityZone = String
+type Region = String
+
 data EurekaConfig = EurekaConfig {
-      eurekaServerServiceUrls :: Map String [String]
+      eurekaServerServiceUrls :: Map AvailabilityZone [String]
       -- ^ The URLs for Eureka, per availability zone.
     , eurekaInstanceInfoReplicationInterval :: Int
       -- ^ How often, in seconds, to push instance info to Eureka.
+    , eurekaAvailabilityZones :: Map Region [AvailabilityZone]
+      -- ^ Availability zones that we run in, indexed by region.
+    , eurekaRegion :: Region
+      -- ^ The region we are running in.
     } deriving Show
 
 defaultEurekaConfig = EurekaConfig {
       eurekaServerServiceUrls = Map.empty
     , eurekaInstanceInfoReplicationInterval = 30
+    , eurekaAvailabilityZones = Map.empty
+    , eurekaRegion = ""
     }
 
 data InstanceConfig = InstanceConfig {
