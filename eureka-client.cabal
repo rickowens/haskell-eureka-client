@@ -27,3 +27,14 @@ library
     time
   hs-source-dirs:      src
   default-language:    Haskell2010
+
+executable test
+  main-is: test.hs
+  build-depends:
+    aws-sdk,
+    base,
+    containers,
+    old-locale,
+    time
+  hs-source-dirs:     src
+  default-language:   Haskell2010

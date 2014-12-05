@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
+                       defaultEurekaConfig, defaultInstanceConfig,
                        EurekaConnection) where
 
 import Data.Time.Clock (UTCTime, getCurrentTime)
@@ -17,6 +18,11 @@ data EurekaConfig = EurekaConfig {
     , eurekaInstanceInfoReplicationInterval :: Int
       -- ^ How often, in seconds, to push instance info to Eureka.
     } deriving Show
+
+defaultEurekaConfig = EurekaConfig {
+      eurekaServerServiceUrls = Map.empty
+    , eurekaInstanceInfoReplicationInterval = 30
+    }
 
 data InstanceConfig = InstanceConfig {
       instanceServiceUrlDefault :: String
@@ -46,6 +52,20 @@ data InstanceConfig = InstanceConfig {
       -- false.
     } deriving Show
 
+defaultInstanceConfig = InstanceConfig {
+      instanceServiceUrlDefault = ""
+    , instanceLeaseRenewalInterval = 30
+    , instanceName = ""
+    , instanceNonSecurePortEnabled = False
+    , instanceSecurePortEnabled = False
+    , instanceNonSecurePort = 80
+    , instanceSecurePort = 443
+    , instanceStatusPageUrl = Nothing
+    , instanceHomePageUrl = ""
+    , instanceMetadata = Map.empty
+    , instanceEnabledOnInit = True
+    }
+
 data EurekaConnection = EurekaConnection {
       eConnEurekaConfig :: EurekaConfig
       -- ^ The configuration specifying where Eureka is.
@@ -66,7 +86,7 @@ withEureka eConfig iConfig m = bracket (connectEureka eConfig iConfig) disconnec
         m eConn
 
 registerInstance :: EurekaConnection -> InstanceConfig -> IO ()
-registerInstance _ _ = undefined
+registerInstance _ _ = return ()
 
 disconnectEureka :: EurekaConnection -> IO ()
 disconnectEureka _ = undefined
