@@ -2,9 +2,14 @@
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        EurekaConnection) where
 
+import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Format (formatTime, parseTime)
 import Data.Map (Map)
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Exception (bracket)
+import Control.Monad.Fix (mfix)
+import System.Locale (defaultTimeLocale)
+import qualified Data.Map as Map
 
 data EurekaConfig = EurekaConfig {
       eurekaServerServiceUrls :: Map String [String]
@@ -54,7 +59,7 @@ data EurekaConnection = EurekaConnection {
     } deriving Show
 
 withEureka :: EurekaConfig -> InstanceConfig -> (EurekaConnection -> IO a) -> IO a
-withEureka eConfig iConfig m = bracket (connectEureka eConfig) disconnectEureka (registerAndRun m)
+withEureka eConfig iConfig m = bracket (connectEureka eConfig iConfig) disconnectEureka (registerAndRun m)
   where
     registerAndRun m eConn = do
         registerInstance eConn iConfig
@@ -66,5 +71,46 @@ registerInstance _ _ = undefined
 disconnectEureka :: EurekaConnection -> IO ()
 disconnectEureka _ = undefined
 
-connectEureka :: EurekaConfig -> IO EurekaConnection
-connectEureka _ = undefined
+formatISO8601 :: UTCTime -> String
+formatISO8601 t = formatTime defaultTimeLocale "%FT%T%QZ" t
+
+postHeartbeat :: EurekaConnection -> IO ()
+postHeartbeat conn = do
+    now <- getCurrentTime
+    print $ "Posting heartbeat " ++ show conn ++ " at " ++ formatISO8601 now
+
+updateInstanceInfo :: EurekaConnection -> IO ()
+updateInstanceInfo conn = do
+    now <- getCurrentTime
+    print $ "Updating instance info " ++ show conn ++ " at " ++ formatISO8601 now
+
+connectEureka :: EurekaConfig -> InstanceConfig -> IO EurekaConnection
+connectEureka
+    eConfig@EurekaConfig{
+        eurekaInstanceInfoReplicationInterval=instanceInfoInterval
+        }
+    iConfig@InstanceConfig{
+        instanceLeaseRenewalInterval=heartbeatInterval
+        } = mfix $ \econn -> do
+    heartbeatThreadId <- forkIO . heartbeatThread $ econn
+    instanceInfoThreadId <- forkIO . instanceInfoThread $ econn
+    return EurekaConnection {
+          eConnEurekaConfig = eConfig
+        , eConnInstanceConfig = iConfig
+        , eConnHeartbeatThread = heartbeatThreadId
+        , eConnInstanceInfoReplicatorThread = instanceInfoThreadId
+        }
+  where
+    heartbeatThread :: EurekaConnection -> IO ()
+    heartbeatThread = repeating heartbeatInterval . postHeartbeat
+    instanceInfoThread = repeating instanceInfoInterval . updateInstanceInfo
+
+-- | Perform an action every 'delay' seconds.
+-- Delays are not exact; we use threadDelay to schedule the repetition.
+repeating :: Int -> IO () -> IO ()
+repeating i a = loop
+  where
+    loop = do
+        a
+        threadDelay (i * 1000 * 1000)
+        loop
