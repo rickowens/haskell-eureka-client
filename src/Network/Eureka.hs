@@ -3,9 +3,11 @@ module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        defaultEurekaConfig, defaultInstanceConfig,
                        EurekaConnection, AvailabilityZone, Region) where
 
+import Data.List (elemIndex, find, nub)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
-import Data.Map (Map)
+import Data.Map (Map, (!))
+import Data.Maybe (fromJust)
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Exception (bracket)
 import Control.Monad.Fix (mfix)
@@ -94,6 +96,33 @@ withEureka eConfig iConfig m = bracket (connectEureka eConfig iConfig) disconnec
         registerInstance eConn iConfig
         m eConn
 
+-- | Provide a list of Eureka servers, with the ones in the same AZ as us first.
+-- Any of these Eureka servers are acceptable to maintain health in the face of
+-- failure, but the ones in the same zone have lower latency, so are preferred.
+eurekaUrlsByProximity :: EurekaConfig -> AvailabilityZone -> [String]
+eurekaUrlsByProximity EurekaConfig {
+    eurekaRegion, eurekaServerServiceUrls, eurekaAvailabilityZones} thisZone =
+    nub
+    . concat
+    . map (eurekaServerServiceUrls !)
+    . thisZoneFirst
+    . (eurekaAvailabilityZones !)
+    $ eurekaRegion
+  where
+    -- | Return the rotation of the list of availability zones that has this
+    -- current zone first.
+    --
+    -- Rotations are used rather than just pulling the present zone to the front
+    -- of the list because this is the algorithm that the Java Eureka client
+    -- uses to order availability zones. Presumably this is to try to not
+    -- dogpile servers in the first availability zone in case of failure.
+    thisZoneFirst :: [AvailabilityZone] -> [AvailabilityZone]
+    thisZoneFirst zones = case elemIndex thisZone zones of
+        Nothing -> error $ "couldn't find " ++ thisZone ++ " in zones " ++ show zones
+        -- fromJust is safe here because if the element is in the list, some
+        -- rotation will put the element at the front.
+        _ -> fromJust . find ((== thisZone) . head) . rotations $ zones
+
 registerInstance :: EurekaConnection -> InstanceConfig -> IO ()
 registerInstance _ _ = return ()
 
@@ -143,3 +172,9 @@ repeating i a = loop
         a
         threadDelay (i * 1000 * 1000)
         loop
+
+-- | Generate a list of rotations of a list.
+-- > rotations [1..4]
+-- [[1,2,3,4],[2,3,4,1],[3,4,1,2],[4,1,2,3]]
+rotations :: [a] -> [[a]]
+rotations lst = map (take (length lst) . flip drop (cycle lst)) $ [0..length lst - 1]
