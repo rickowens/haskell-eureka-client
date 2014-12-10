@@ -9,8 +9,10 @@ import Data.Time.Format (formatTime, parseTime)
 import Data.Map (Map, (!))
 import Data.Maybe (fromJust)
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
-import Control.Exception (bracket)
+import Control.Exception (bracket, throw, try)
+import Control.Monad (foldM)
 import Control.Monad.Fix (mfix)
+import Network.HTTP.Client (HttpException(HandshakeFailed))
 import System.Locale (defaultTimeLocale)
 import qualified Data.Map as Map
 
@@ -162,6 +164,22 @@ connectEureka
     heartbeatThread :: EurekaConnection -> IO ()
     heartbeatThread = repeating heartbeatInterval . postHeartbeat
     instanceInfoThread = repeating instanceInfoInterval . updateInstanceInfo
+
+-- | Make a request of each of the available servers. In case a server fails,
+-- try consecutive servers until one works (or we run out of servers). If all
+-- servers fail, throw the last exception we got.
+makeRequest :: EurekaConnection -> (String -> IO a) -> IO a
+makeRequest conn@EurekaConnection {eConnEurekaConfig, eConnInstanceConfig}
+    action = do
+    result <- foldM tryNext (Left HandshakeFailed) urls
+    case result of
+        Left bad -> throw bad
+        Right good -> return good
+  where
+    urls = eurekaUrlsByProximity eConnEurekaConfig "FIXME: get current zone"
+    (Left bad) `tryNext` nextUrl = try (action nextUrl)
+    (Right good) `tryNext` nextUrl = return (Right good)
+
 
 -- | Perform an action every 'delay' seconds.
 -- Delays are not exact; we use threadDelay to schedule the repetition.

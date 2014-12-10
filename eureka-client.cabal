@@ -23,6 +23,7 @@ library
     aws-sdk,
     base,
     containers,
+    http-client,
     old-locale,
     time
   hs-source-dirs:      src
@@ -34,6 +35,7 @@ executable test
     aws-sdk,
     base,
     containers,
+    http-client,
     old-locale,
     time
   hs-source-dirs:     src
