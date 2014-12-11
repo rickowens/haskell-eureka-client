@@ -65,6 +65,28 @@ data InstanceConfig = InstanceConfig {
       -- false.
     } deriving Show
 
+type AmazonInstanceType = String
+
+data DataCenterInfo = DataCenterMyOwn
+                    | DataCenterAmazon {
+      amazonAmiId :: String
+    , amazonInstanceId :: String
+    , amazonInstanceType :: AmazonInstanceType
+    , amazonLocalIpv4 :: String
+    , amazonAvailabilityZone :: AvailabilityZone
+    , amazonPublicHostname :: String
+    , amazonPublicIpv4 :: String
+    } deriving Show
+
+data InstanceInfo = InstanceInfo {
+      instanceDataCenterInfo :: DataCenterInfo
+      -- ^ Info about what data center this instance is running in.
+    } deriving Show
+
+defaultInstanceInfo = InstanceInfo {
+      instanceDataCenterInfo = DataCenterMyOwn
+    }
+
 defaultInstanceConfig = InstanceConfig {
       instanceServiceUrlDefault = ""
     , instanceLeaseRenewalInterval = 30
@@ -84,6 +106,8 @@ data EurekaConnection = EurekaConnection {
       -- ^ The configuration specifying where Eureka is.
     , eConnInstanceConfig :: InstanceConfig
       -- ^ The configuration about this instance and how it will talk to Eureka.
+    , eConnInstanceInfo :: InstanceInfo
+      -- ^ Info about this instance as discovered at runtime.
     , eConnHeartbeatThread :: ThreadId
       -- ^ Thread that periodically posts a heartbeat to Eureka so that it knows
       -- we're still alive.
@@ -157,6 +181,7 @@ connectEureka
     return EurekaConnection {
           eConnEurekaConfig = eConfig
         , eConnInstanceConfig = iConfig
+        , eConnInstanceInfo = defaultInstanceInfo
         , eConnHeartbeatThread = heartbeatThreadId
         , eConnInstanceInfoReplicatorThread = instanceInfoThreadId
         }
