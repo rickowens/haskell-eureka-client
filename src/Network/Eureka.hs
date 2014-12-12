@@ -31,6 +31,7 @@ data EurekaConfig = EurekaConfig {
       -- ^ The region we are running in.
     } deriving Show
 
+defaultEurekaConfig :: EurekaConfig
 defaultEurekaConfig = EurekaConfig {
       eurekaServerServiceUrls = Map.empty
     , eurekaInstanceInfoReplicationInterval = 30
@@ -84,10 +85,12 @@ data InstanceInfo = InstanceInfo {
       -- ^ Info about what data center this instance is running in.
     } deriving Show
 
+defaultInstanceInfo :: InstanceInfo
 defaultInstanceInfo = InstanceInfo {
       instanceDataCenterInfo = DataCenterMyOwn
     }
 
+defaultInstanceConfig :: InstanceConfig
 defaultInstanceConfig = InstanceConfig {
       instanceServiceUrlDefault = ""
     , instanceLeaseRenewalInterval = 30
@@ -119,9 +122,9 @@ data EurekaConnection = EurekaConnection {
 withEureka :: EurekaConfig -> InstanceConfig -> InstanceInfo
            -> (EurekaConnection -> IO a) -> IO a
 withEureka eConfig iConfig iInfo m =
-    bracket (connectEureka eConfig iConfig iInfo) disconnectEureka (registerAndRun m)
+    bracket (connectEureka eConfig iConfig iInfo) disconnectEureka registerAndRun
   where
-    registerAndRun m eConn = do
+    registerAndRun eConn = do
         registerInstance eConn iConfig
         m eConn
 
@@ -205,8 +208,8 @@ makeRequest conn@EurekaConnection {eConnEurekaConfig}
         Right good -> return good
   where
     urls = eurekaUrlsByProximity eConnEurekaConfig (availabilityZone conn)
-    (Left bad) `tryNext` nextUrl = try (action nextUrl)
-    (Right good) `tryNext` nextUrl = return (Right good)
+    (Left _) `tryNext` nextUrl = try (action nextUrl)
+    (Right good) `tryNext` _ = return (Right good)
 
 availabilityZonesFromConfig :: EurekaConfig -> [AvailabilityZone]
 availabilityZonesFromConfig EurekaConfig{eurekaAvailabilityZones, eurekaRegion} =
