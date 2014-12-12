@@ -13,7 +13,8 @@ import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Exception (bracket, throw, try)
 import Control.Monad (foldM)
 import Control.Monad.Fix (mfix)
-import Network.HTTP.Client (HttpException(HandshakeFailed))
+import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
+                            defaultManagerSettings, withManager)
 import System.Locale (defaultTimeLocale)
 import qualified Data.Map as Map
 
@@ -117,12 +118,26 @@ data EurekaConnection = EurekaConnection {
       -- we're still alive.
     , eConnInstanceInfoReplicatorThread :: ThreadId
       -- ^ Thread that periodically pushes instance information to Eureka.
-    } deriving Show
+    , eConnManager :: Manager
+      -- ^ HTTP manager that we use to make requests.
+    }
+
+instance Show EurekaConnection where
+    show EurekaConnection {eConnEurekaConfig, eConnInstanceConfig,
+                           eConnInstanceInfo, eConnHeartbeatThread,
+                           eConnInstanceInfoReplicatorThread} =
+        "EurekaConnection {eConnEurekaConfig=" ++ show eConnEurekaConfig ++
+        ", eConnInstanceConfig=" ++ show eConnInstanceConfig ++
+        ", eConnInstanceInfo=" ++ show eConnInstanceInfo ++
+        ", eConnHeartbeatThread=" ++ show eConnHeartbeatThread ++
+        ", eConnInstanceInfoReplicatorThread=" ++ show eConnInstanceInfoReplicatorThread ++
+        "}"
 
 withEureka :: EurekaConfig -> InstanceConfig -> InstanceInfo
            -> (EurekaConnection -> IO a) -> IO a
 withEureka eConfig iConfig iInfo m =
-    bracket (connectEureka eConfig iConfig iInfo) disconnectEureka registerAndRun
+    withManager defaultManagerSettings $ \manager ->
+    bracket (connectEureka manager eConfig iConfig iInfo) disconnectEureka registerAndRun
   where
     registerAndRun eConn = do
         registerInstance eConn
@@ -174,8 +189,10 @@ updateInstanceInfo conn = do
     now <- getCurrentTime
     print $ "Updating instance info " ++ show conn ++ " at " ++ formatISO8601 now
 
-connectEureka :: EurekaConfig -> InstanceConfig -> InstanceInfo -> IO EurekaConnection
-connectEureka
+connectEureka :: Manager
+              -> EurekaConfig -> InstanceConfig -> InstanceInfo
+              -> IO EurekaConnection
+connectEureka manager
     eConfig@EurekaConfig{
         eurekaInstanceInfoReplicationInterval=instanceInfoInterval
         }
@@ -190,6 +207,7 @@ connectEureka
         , eConnInstanceInfo = instanceInfo
         , eConnHeartbeatThread = heartbeatThreadId
         , eConnInstanceInfoReplicatorThread = instanceInfoThreadId
+        , eConnManager = manager
         }
   where
     heartbeatThread :: EurekaConnection -> IO ()
