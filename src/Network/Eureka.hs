@@ -1,6 +1,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        defaultEurekaConfig, defaultInstanceConfig,
+                       defaultInstanceInfo,
                        EurekaConnection, AvailabilityZone, Region) where
 
 import Data.List (elemIndex, find, nub)
@@ -115,8 +116,10 @@ data EurekaConnection = EurekaConnection {
       -- ^ Thread that periodically pushes instance information to Eureka.
     } deriving Show
 
-withEureka :: EurekaConfig -> InstanceConfig -> (EurekaConnection -> IO a) -> IO a
-withEureka eConfig iConfig m = bracket (connectEureka eConfig iConfig) disconnectEureka (registerAndRun m)
+withEureka :: EurekaConfig -> InstanceConfig -> InstanceInfo
+           -> (EurekaConnection -> IO a) -> IO a
+withEureka eConfig iConfig iInfo m =
+    bracket (connectEureka eConfig iConfig iInfo) disconnectEureka (registerAndRun m)
   where
     registerAndRun m eConn = do
         registerInstance eConn iConfig
@@ -168,20 +171,20 @@ updateInstanceInfo conn = do
     now <- getCurrentTime
     print $ "Updating instance info " ++ show conn ++ " at " ++ formatISO8601 now
 
-connectEureka :: EurekaConfig -> InstanceConfig -> IO EurekaConnection
+connectEureka :: EurekaConfig -> InstanceConfig -> InstanceInfo -> IO EurekaConnection
 connectEureka
     eConfig@EurekaConfig{
         eurekaInstanceInfoReplicationInterval=instanceInfoInterval
         }
     iConfig@InstanceConfig{
         instanceLeaseRenewalInterval=heartbeatInterval
-        } = mfix $ \econn -> do
+        } instanceInfo = mfix $ \econn -> do
     heartbeatThreadId <- forkIO . heartbeatThread $ econn
     instanceInfoThreadId <- forkIO . instanceInfoThread $ econn
     return EurekaConnection {
           eConnEurekaConfig = eConfig
         , eConnInstanceConfig = iConfig
-        , eConnInstanceInfo = defaultInstanceInfo
+        , eConnInstanceInfo = instanceInfo
         , eConnHeartbeatThread = heartbeatThreadId
         , eConnInstanceInfoReplicatorThread = instanceInfoThreadId
         }
