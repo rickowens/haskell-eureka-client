@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        defaultEurekaConfig, defaultInstanceConfig,
                        defaultInstanceInfo,
@@ -9,14 +9,22 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
 import Data.Map (Map, (!))
 import Data.Maybe (fromJust)
+import Data.Text.Encoding (encodeUtf8)
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Exception (bracket, throw, try)
 import Control.Monad (foldM)
 import Control.Monad.Fix (mfix)
 import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
-                            defaultManagerSettings, withManager)
+                            RequestBody(RequestBodyBS),
+                            Request(method, path, requestBody, requestHeaders),
+                            defaultManagerSettings,
+                            parseUrl,
+                            withManager, withResponse)
+import Network.HTTP.Types.Method (methodPost)
 import System.Locale (defaultTimeLocale)
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
+import qualified Data.Text as T
 
 type AvailabilityZone = String
 type Region = String
@@ -171,7 +179,18 @@ eurekaUrlsByProximity eConfig@EurekaConfig {
         _ -> fromJust . find ((== thisZone) . head) . rotations $ zones
 
 registerInstance :: EurekaConnection -> IO ()
-registerInstance _ = return ()
+registerInstance eConn@EurekaConnection { eConnManager,
+        eConnInstanceConfig = InstanceConfig {instanceAppName}
+    } = makeRequest eConn sendRegister
+  where
+    sendRegister url = withResponse (registerRequest url) eConnManager $ \_ -> do
+        return ()
+    registerRequest url = (fromJust $ parseUrl url) {
+          method = methodPost
+        , path = encodeUtf8 $ T.pack $ "/apps/" ++ instanceAppName
+        , requestHeaders = [("Content-Type", "application/json")]
+        , requestBody = RequestBodyBS $ encodeUtf8 $ T.pack "{}"
+        }
 
 disconnectEureka :: EurekaConnection -> IO ()
 disconnectEureka _ = return ()
