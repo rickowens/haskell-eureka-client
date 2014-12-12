@@ -204,9 +204,23 @@ makeRequest conn@EurekaConnection {eConnEurekaConfig, eConnInstanceConfig}
         Left bad -> throw bad
         Right good -> return good
   where
-    urls = eurekaUrlsByProximity eConnEurekaConfig "FIXME: get current zone"
+    urls = eurekaUrlsByProximity eConnEurekaConfig (availabilityZone conn)
     (Left bad) `tryNext` nextUrl = try (action nextUrl)
     (Right good) `tryNext` nextUrl = return (Right good)
+
+availabilityZonesFromConfig :: EurekaConfig -> [AvailabilityZone]
+availabilityZonesFromConfig EurekaConfig{eurekaAvailabilityZones, eurekaRegion} =
+    eurekaAvailabilityZones ! eurekaRegion
+
+availabilityZone :: EurekaConnection -> AvailabilityZone
+availabilityZone EurekaConnection {
+    eConnInstanceInfo = InstanceInfo {
+        instanceDataCenterInfo = DataCenterAmazon {amazonAvailabilityZone}
+        }
+    } = amazonAvailabilityZone
+availabilityZone EurekaConnection {eConnEurekaConfig} =
+    head $ availabilityZonesFromConfig eConnEurekaConfig ++ ["default"]
+
 
 
 -- | Perform an action every 'delay' seconds.
