@@ -159,11 +159,10 @@ withEureka eConfig iConfig iInfo m =
 -- Any of these Eureka servers are acceptable to maintain health in the face of
 -- failure, but the ones in the same zone have lower latency, so are preferred.
 eurekaUrlsByProximity :: EurekaConfig -> AvailabilityZone -> [String]
-eurekaUrlsByProximity eConfig@EurekaConfig {
-    eurekaServerServiceUrls } thisZone =
+eurekaUrlsByProximity eConfig thisZone =
     nub
     . concat
-    . map (eurekaServerServiceUrls !)
+    . map (eurekaServerServiceUrlsForZone eConfig)
     . thisZoneFirst
     . availabilityZonesFromConfig
     $ eConfig
@@ -258,6 +257,13 @@ availabilityZonesFromConfig EurekaConfig{eurekaAvailabilityZones, eurekaRegion} 
         Nothing -> error $ "couldn't find region " ++ show eurekaRegion
                            ++ " in zones config " ++ show eurekaAvailabilityZones
         Just zones -> zones
+
+eurekaServerServiceUrlsForZone :: EurekaConfig -> AvailabilityZone -> [String]
+eurekaServerServiceUrlsForZone EurekaConfig {eurekaServerServiceUrls} zone =
+    case Map.lookup zone eurekaServerServiceUrls of
+        Nothing -> error $ "couldn't find any Eureka server URLs for zone " ++ show zone
+                           ++ " in service config " ++ show eurekaServerServiceUrls
+        Just urls -> urls
 
 availabilityZone :: EurekaConnection -> AvailabilityZone
 availabilityZone EurekaConnection {
