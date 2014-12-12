@@ -45,7 +45,7 @@ data InstanceConfig = InstanceConfig {
       -- ^ What URL to use to access the service.
     , instanceLeaseRenewalInterval :: Int
       -- ^ How often, in seconds, to send heartbeat updates.
-    , instanceName :: String
+    , instanceAppName :: String
       -- ^ The name of the service.
     , instanceNonSecurePortEnabled :: Bool
       -- ^ True if this instance can be accessed over an insecure port.
@@ -95,7 +95,7 @@ defaultInstanceConfig :: InstanceConfig
 defaultInstanceConfig = InstanceConfig {
       instanceServiceUrlDefault = ""
     , instanceLeaseRenewalInterval = 30
-    , instanceName = ""
+    , instanceAppName = ""
     , instanceNonSecurePortEnabled = False
     , instanceSecurePortEnabled = False
     , instanceNonSecurePort = 80
