@@ -197,7 +197,7 @@ connectEureka
 -- try consecutive servers until one works (or we run out of servers). If all
 -- servers fail, throw the last exception we got.
 makeRequest :: EurekaConnection -> (String -> IO a) -> IO a
-makeRequest conn@EurekaConnection {eConnEurekaConfig, eConnInstanceConfig}
+makeRequest conn@EurekaConnection {eConnEurekaConfig}
     action = do
     result <- foldM tryNext (Left HandshakeFailed) urls
     case result of
