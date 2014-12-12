@@ -29,6 +29,8 @@ import qualified Data.Text as T
 type AvailabilityZone = String
 type Region = String
 
+-- | Configuration necessary to speak to a Eureka server.  This corresponds to
+-- the EurekaClientConfig class in Netflix's implementation.
 data EurekaConfig = EurekaConfig {
       eurekaServerServiceUrls :: Map AvailabilityZone [String]
       -- ^ The URLs for Eureka, per availability zone.
@@ -48,6 +50,8 @@ defaultEurekaConfig = EurekaConfig {
     , eurekaRegion = ""
     }
 
+-- | Configuration about this instance.  This corresponds to the
+-- EurekaInstanceConfig class in Netflix's implementation.
 data InstanceConfig = InstanceConfig {
       instanceServiceUrlDefault :: String
       -- ^ What URL to use to access the service.
