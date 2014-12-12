@@ -4,6 +4,7 @@ import Network.Eureka (withEureka,
     defaultInstanceInfo)
 import Control.Concurrent (threadDelay)
 
+main :: IO ()
 main = withEureka myEurekaConfig myInstanceConfig defaultInstanceInfo $ \_ -> do
     sequence_ $ replicate 20 $ threadDelay $ 1000 * 1000
   where
