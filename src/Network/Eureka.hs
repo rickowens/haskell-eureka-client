@@ -174,7 +174,7 @@ registerInstance :: EurekaConnection -> IO ()
 registerInstance _ = return ()
 
 disconnectEureka :: EurekaConnection -> IO ()
-disconnectEureka _ = undefined
+disconnectEureka _ = return ()
 
 formatISO8601 :: UTCTime -> String
 formatISO8601 t = formatTime defaultTimeLocale "%FT%T%QZ" t
