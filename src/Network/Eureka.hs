@@ -125,7 +125,7 @@ withEureka eConfig iConfig iInfo m =
     bracket (connectEureka eConfig iConfig iInfo) disconnectEureka registerAndRun
   where
     registerAndRun eConn = do
-        registerInstance eConn iConfig
+        registerInstance eConn
         m eConn
 
 -- | Provide a list of Eureka servers, with the ones in the same AZ as us first.
@@ -155,8 +155,8 @@ eurekaUrlsByProximity EurekaConfig {
         -- rotation will put the element at the front.
         _ -> fromJust . find ((== thisZone) . head) . rotations $ zones
 
-registerInstance :: EurekaConnection -> InstanceConfig -> IO ()
-registerInstance _ _ = return ()
+registerInstance :: EurekaConnection -> IO ()
+registerInstance _ = return ()
 
 disconnectEureka :: EurekaConnection -> IO ()
 disconnectEureka _ = undefined
