@@ -16,13 +16,12 @@ import Control.Monad (foldM)
 import Control.Monad.Fix (mfix)
 import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             RequestBody(RequestBodyBS),
-                            Request(method, path, requestBody, requestHeaders),
+                            Request(method, requestBody, requestHeaders),
                             defaultManagerSettings,
                             parseUrl,
                             withManager, withResponse)
 import Network.HTTP.Types.Method (methodPost)
 import System.Locale (defaultTimeLocale)
-import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import qualified Data.Text as T
 
@@ -188,12 +187,23 @@ registerInstance eConn@EurekaConnection { eConnManager,
   where
     sendRegister url = withResponse (registerRequest url) eConnManager $ \_ -> do
         return ()
-    registerRequest url = (fromJust $ parseUrl url) {
+    registerRequest url = request {
           method = methodPost
-        , path = encodeUtf8 $ T.pack $ "/apps/" ++ instanceAppName
         , requestHeaders = [("Content-Type", "application/json")]
         , requestBody = RequestBodyBS $ encodeUtf8 $ T.pack "{}"
         }
+      where
+        request = fromJust $ parseUrl (addPath url "apps/" ++ instanceAppName)
+
+-- | Add an additional path fragment to a base URL.
+--
+-- I tried doing this using the http-types library but it was just so
+-- inconvenient that I fell back to doing it this way. Alternative
+-- implementations welcomed.
+addPath :: String -> String -> String
+addPath base additional = baseWithSlash ++ additional
+  where
+    baseWithSlash = if last base == '/' then base else base ++ "/"
 
 disconnectEureka :: EurekaConnection -> IO ()
 disconnectEureka _ = return ()

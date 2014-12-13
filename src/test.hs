@@ -2,7 +2,8 @@ import Network.Eureka (withEureka,
     EurekaConfig(eurekaInstanceInfoReplicationInterval, eurekaRegion,
                  eurekaServerServiceUrls,
                  eurekaAvailabilityZones), defaultEurekaConfig,
-    InstanceConfig(instanceLeaseRenewalInterval), defaultInstanceConfig,
+    InstanceConfig(instanceAppName, instanceLeaseRenewalInterval),
+    defaultInstanceConfig,
     defaultInstanceInfo)
 import Control.Concurrent (threadDelay)
 import System.Environment (getArgs)
@@ -21,4 +22,7 @@ main = do
         eurekaAvailabilityZones = Map.fromList [("us-east-1", ["us-east-1a"])],
         eurekaRegion = "us-east-1"
         }
-    myInstanceConfig = defaultInstanceConfig { instanceLeaseRenewalInterval = 1 }
+    myInstanceConfig = defaultInstanceConfig {
+        instanceLeaseRenewalInterval = 1,
+        instanceAppName = "haskell_eureka_test_app"
+        }
