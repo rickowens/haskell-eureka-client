@@ -4,18 +4,18 @@ module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        defaultInstanceInfo,
                        EurekaConnection, AvailabilityZone, Region) where
 
+import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
 import Data.List (elemIndex, find, nub)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
 import Data.Map (Map, (!))
 import Data.Maybe (fromJust)
-import Data.Text.Encoding (encodeUtf8)
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Exception (bracket, throw, try)
 import Control.Monad (foldM)
 import Control.Monad.Fix (mfix)
 import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
-                            RequestBody(RequestBodyBS),
+                            RequestBody(RequestBodyLBS),
                             Request(method, requestBody, requestHeaders),
                             defaultManagerSettings,
                             parseUrl,
@@ -23,7 +23,6 @@ import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
 import Network.HTTP.Types.Method (methodPost)
 import System.Locale (defaultTimeLocale)
 import qualified Data.Map as Map
-import qualified Data.Text as T
 
 type AvailabilityZone = String
 type Region = String
@@ -96,6 +95,39 @@ data InstanceInfo = InstanceInfo {
       instanceDataCenterInfo :: DataCenterInfo
       -- ^ Info about what data center this instance is running in.
     } deriving Show
+
+instance ToJSON InstanceInfo where
+    toJSON InstanceInfo {
+        instanceDataCenterInfo
+        } = object [
+        "datacenter" .= instanceDataCenterInfo
+        ]
+
+instance ToJSON DataCenterInfo where
+    toJSON DataCenterMyOwn = object [
+        "name" .= ("MyOwn" :: String)
+        ]
+    toJSON DataCenterAmazon {
+          amazonAmiId
+        , amazonInstanceId
+        , amazonInstanceType
+        , amazonLocalIpv4
+        , amazonAvailabilityZone
+        , amazonPublicHostname
+        , amazonPublicIpv4
+        } = object [
+        "name" .= ("Amazon" :: String),
+        "metadata" .= object [
+            "ami-id" .= amazonAmiId,
+            "ami-launch-index" .= ("FIXME" :: String),
+            "instance-type" .= amazonInstanceType,
+            "instance-id" .= amazonInstanceId,
+            "local-ipv4" .= amazonLocalIpv4,
+            "availability-zone" .= amazonAvailabilityZone,
+            "public-hostname" .= amazonPublicHostname,
+            "public-ipv4" .= amazonPublicIpv4
+            ]
+        ]
 
 defaultInstanceInfo :: InstanceInfo
 defaultInstanceInfo = InstanceInfo {
@@ -182,7 +214,8 @@ eurekaUrlsByProximity eConfig thisZone =
 
 registerInstance :: EurekaConnection -> IO ()
 registerInstance eConn@EurekaConnection { eConnManager,
-        eConnInstanceConfig = InstanceConfig {instanceAppName}
+        eConnInstanceConfig = InstanceConfig {instanceAppName},
+        eConnInstanceInfo
     } = makeRequest eConn sendRegister
   where
     sendRegister url = withResponse (registerRequest url) eConnManager $ \_ -> do
@@ -190,7 +223,7 @@ registerInstance eConn@EurekaConnection { eConnManager,
     registerRequest url = request {
           method = methodPost
         , requestHeaders = [("Content-Type", "application/json")]
-        , requestBody = RequestBodyBS $ encodeUtf8 $ T.pack "{}"
+        , requestBody = RequestBodyLBS $ encode $ object ["instance" .= eConnInstanceInfo]
         }
       where
         request = fromJust $ parseUrl (addPath url "apps/" ++ instanceAppName)
