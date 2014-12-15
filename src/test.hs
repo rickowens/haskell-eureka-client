@@ -3,8 +3,8 @@ import Network.Eureka (withEureka,
                  eurekaServerServiceUrls,
                  eurekaAvailabilityZones), defaultEurekaConfig,
     InstanceConfig(instanceAppName, instanceLeaseRenewalInterval),
-    defaultInstanceConfig,
-    defaultInstanceInfo)
+    DataCenterInfo(DataCenterMyOwn),
+    defaultInstanceConfig)
 import Control.Concurrent (threadDelay)
 import System.Environment (getArgs)
 import qualified Data.Map as Map
@@ -13,7 +13,7 @@ main :: IO ()
 main = do
     args <- getArgs
     let [commandLineServer] = args
-    withEureka (myEurekaConfig commandLineServer) myInstanceConfig defaultInstanceInfo $ \_ -> do
+    withEureka (myEurekaConfig commandLineServer) myInstanceConfig DataCenterMyOwn $ \_ -> do
         sequence_ $ replicate 20 $ threadDelay $ 1000 * 1000
   where
     myEurekaConfig serverUrl = defaultEurekaConfig {

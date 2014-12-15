@@ -1,10 +1,10 @@
 {-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        defaultEurekaConfig, defaultInstanceConfig,
-                       defaultInstanceInfo,
+                       DataCenterInfo(DataCenterMyOwn),
                        EurekaConnection, AvailabilityZone, Region) where
 
-import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
+import Data.Aeson (object, encode, ToJSON(toJSON), (.=), Value)
 import Data.List (elemIndex, find, nub)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
@@ -91,18 +91,6 @@ data DataCenterInfo = DataCenterMyOwn
     , amazonPublicIpv4 :: String
     } deriving Show
 
-data InstanceInfo = InstanceInfo {
-      instanceDataCenterInfo :: DataCenterInfo
-      -- ^ Info about what data center this instance is running in.
-    } deriving Show
-
-instance ToJSON InstanceInfo where
-    toJSON InstanceInfo {
-        instanceDataCenterInfo
-        } = object [
-        "datacenter" .= instanceDataCenterInfo
-        ]
-
 instance ToJSON DataCenterInfo where
     toJSON DataCenterMyOwn = object [
         "name" .= ("MyOwn" :: String)
@@ -129,11 +117,6 @@ instance ToJSON DataCenterInfo where
             ]
         ]
 
-defaultInstanceInfo :: InstanceInfo
-defaultInstanceInfo = InstanceInfo {
-      instanceDataCenterInfo = DataCenterMyOwn
-    }
-
 defaultInstanceConfig :: InstanceConfig
 defaultInstanceConfig = InstanceConfig {
       instanceServiceUrlDefault = ""
@@ -154,8 +137,8 @@ data EurekaConnection = EurekaConnection {
       -- ^ The configuration specifying where Eureka is.
     , eConnInstanceConfig :: InstanceConfig
       -- ^ The configuration about this instance and how it will talk to Eureka.
-    , eConnInstanceInfo :: InstanceInfo
-      -- ^ Info about this instance as discovered at runtime.
+    , eConnDataCenterInfo :: DataCenterInfo
+      -- ^ Datacenter info discovered at runtime.
     , eConnHeartbeatThread :: ThreadId
       -- ^ Thread that periodically posts a heartbeat to Eureka so that it knows
       -- we're still alive.
@@ -167,16 +150,17 @@ data EurekaConnection = EurekaConnection {
 
 instance Show EurekaConnection where
     show EurekaConnection {eConnEurekaConfig, eConnInstanceConfig,
-                           eConnInstanceInfo, eConnHeartbeatThread,
+                           eConnDataCenterInfo,
+                           eConnHeartbeatThread,
                            eConnInstanceInfoReplicatorThread} =
         "EurekaConnection {eConnEurekaConfig=" ++ show eConnEurekaConfig ++
         ", eConnInstanceConfig=" ++ show eConnInstanceConfig ++
-        ", eConnInstanceInfo=" ++ show eConnInstanceInfo ++
+        ", eConnDataCenterInfo=" ++ show eConnDataCenterInfo ++
         ", eConnHeartbeatThread=" ++ show eConnHeartbeatThread ++
         ", eConnInstanceInfoReplicatorThread=" ++ show eConnInstanceInfoReplicatorThread ++
         "}"
 
-withEureka :: EurekaConfig -> InstanceConfig -> InstanceInfo
+withEureka :: EurekaConfig -> InstanceConfig -> DataCenterInfo
            -> (EurekaConnection -> IO a) -> IO a
 withEureka eConfig iConfig iInfo m =
     withManager defaultManagerSettings $ \manager ->
@@ -214,8 +198,7 @@ eurekaUrlsByProximity eConfig thisZone =
 
 registerInstance :: EurekaConnection -> IO ()
 registerInstance eConn@EurekaConnection { eConnManager,
-        eConnInstanceConfig = InstanceConfig {instanceAppName},
-        eConnInstanceInfo
+        eConnInstanceConfig = InstanceConfig {instanceAppName}
     } = makeRequest eConn sendRegister
   where
     sendRegister url = withResponse (registerRequest url) eConnManager $ \_ -> do
@@ -223,10 +206,17 @@ registerInstance eConn@EurekaConnection { eConnManager,
     registerRequest url = request {
           method = methodPost
         , requestHeaders = [("Content-Type", "application/json")]
-        , requestBody = RequestBodyLBS $ encode $ object ["instance" .= eConnInstanceInfo]
+        , requestBody = RequestBodyLBS $ encode $ object ["instance" .= eConnInstanceInfo eConn]
         }
       where
         request = fromJust $ parseUrl (addPath url "apps/" ++ instanceAppName)
+
+eConnInstanceInfo :: EurekaConnection -> Value
+eConnInstanceInfo EurekaConnection {
+      eConnDataCenterInfo
+    } = object [
+        "datacenter" .= eConnDataCenterInfo
+    ]
 
 -- | Add an additional path fragment to a base URL.
 --
@@ -255,7 +245,7 @@ updateInstanceInfo conn = do
     print $ "Updating instance info " ++ show conn ++ " at " ++ formatISO8601 now
 
 connectEureka :: Manager
-              -> EurekaConfig -> InstanceConfig -> InstanceInfo
+              -> EurekaConfig -> InstanceConfig -> DataCenterInfo
               -> IO EurekaConnection
 connectEureka manager
     eConfig@EurekaConfig{
@@ -263,16 +253,16 @@ connectEureka manager
         }
     iConfig@InstanceConfig{
         instanceLeaseRenewalInterval=heartbeatInterval
-        } instanceInfo = mfix $ \econn -> do
+        } dataCenterInfo = mfix $ \econn -> do
     heartbeatThreadId <- forkIO . heartbeatThread $ econn
     instanceInfoThreadId <- forkIO . instanceInfoThread $ econn
     return EurekaConnection {
           eConnEurekaConfig = eConfig
         , eConnInstanceConfig = iConfig
-        , eConnInstanceInfo = instanceInfo
         , eConnHeartbeatThread = heartbeatThreadId
         , eConnInstanceInfoReplicatorThread = instanceInfoThreadId
         , eConnManager = manager
+        , eConnDataCenterInfo = dataCenterInfo
         }
   where
     heartbeatThread :: EurekaConnection -> IO ()
@@ -310,9 +300,7 @@ eurekaServerServiceUrlsForZone EurekaConfig {eurekaServerServiceUrls} zone =
 
 availabilityZone :: EurekaConnection -> AvailabilityZone
 availabilityZone EurekaConnection {
-    eConnInstanceInfo = InstanceInfo {
-        instanceDataCenterInfo = DataCenterAmazon {amazonAvailabilityZone}
-        }
+    eConnDataCenterInfo = DataCenterAmazon {amazonAvailabilityZone}
     } = amazonAvailabilityZone
 availabilityZone EurekaConnection {eConnEurekaConfig} =
     head $ availabilityZonesFromConfig eConnEurekaConfig ++ ["default"]
