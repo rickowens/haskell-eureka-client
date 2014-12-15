@@ -14,6 +14,7 @@ import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Exception (bracket, throw, try)
 import Control.Monad (foldM)
 import Control.Monad.Fix (mfix)
+import Network.HostName (HostName, getHostName)
 import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             RequestBody(RequestBodyLBS),
                             Request(method, requestBody, requestHeaders),
@@ -122,7 +123,7 @@ instance ToJSON DataCenterInfo where
 -- This is all the information we need in order to register. Queries for other
 -- instances also return these objects.
 data InstanceInfo = InstanceInfo {
-      instanceInfoHostName :: String
+      instanceInfoHostName :: HostName
     , instanceInfoAppName :: String
     , instanceInfoVipAddr :: String
     , instanceInfoSecureVipAddr :: String
@@ -195,6 +196,8 @@ data EurekaConnection = EurekaConnection {
       -- ^ Thread that periodically pushes instance information to Eureka.
     , eConnManager :: Manager
       -- ^ HTTP manager that we use to make requests.
+    , eConnHostname :: HostName
+      -- ^ Base hostname gotten from the system at startup.
     }
 
 instance Show EurekaConnection where
@@ -270,8 +273,9 @@ eConnInstanceInfo EurekaConnection {
         , instanceNonSecurePort
         , instanceSecurePort
         }
+    , eConnHostname
     } = InstanceInfo {
-      instanceInfoHostName = "FIXME"
+      instanceInfoHostName = eConnHostname
     , instanceInfoAppName = instanceAppName
     , instanceInfoVipAddr = "FIXME"
     , instanceInfoSecureVipAddr = "FIXME"
@@ -319,6 +323,7 @@ connectEureka manager
         } dataCenterInfo = mfix $ \econn -> do
     heartbeatThreadId <- forkIO . heartbeatThread $ econn
     instanceInfoThreadId <- forkIO . instanceInfoThread $ econn
+    hostname <- getHostName
     return EurekaConnection {
           eConnEurekaConfig = eConfig
         , eConnInstanceConfig = iConfig
@@ -326,6 +331,7 @@ connectEureka manager
         , eConnInstanceInfoReplicatorThread = instanceInfoThreadId
         , eConnManager = manager
         , eConnDataCenterInfo = dataCenterInfo
+        , eConnHostname = hostname
         }
   where
     heartbeatThread :: EurekaConnection -> IO ()
