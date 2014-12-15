@@ -4,7 +4,7 @@ module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        DataCenterInfo(DataCenterMyOwn),
                        EurekaConnection, AvailabilityZone, Region) where
 
-import Data.Aeson (object, encode, ToJSON(toJSON), (.=), Value)
+import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
 import Data.List (elemIndex, find, nub)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
@@ -117,6 +117,42 @@ instance ToJSON DataCenterInfo where
             ]
         ]
 
+-- | Wire format for "instance infos".
+--
+-- This is all the information we need in order to register. Queries for other
+-- instances also return these objects.
+data InstanceInfo = InstanceInfo {
+      instanceInfoHostName :: String
+    , instanceInfoAppName :: String
+    , instanceInfoVipAddr :: String
+    , instanceInfoSecureVipAddr :: String
+    , instanceInfoStatus :: String
+    , instanceInfoPort :: Int
+    , instanceInfoSecurePort :: Int
+    , instanceInfoDataCenterInfo :: DataCenterInfo
+    } deriving Show
+
+instance ToJSON InstanceInfo where
+    toJSON InstanceInfo {
+          instanceInfoHostName
+        , instanceInfoAppName
+        , instanceInfoVipAddr
+        , instanceInfoSecureVipAddr
+        , instanceInfoStatus
+        , instanceInfoPort
+        , instanceInfoSecurePort
+        , instanceInfoDataCenterInfo
+        } = object [
+        "hostName" .= instanceInfoHostName,
+        "app" .= instanceInfoAppName,
+        "vipAddr" .= instanceInfoVipAddr,
+        "secureVipAddr" .= instanceInfoSecureVipAddr,
+        "status" .= instanceInfoStatus,
+        "port" .= instanceInfoPort,
+        "securePort" .= instanceInfoSecurePort,
+        "dataCenterInfo" .= instanceInfoDataCenterInfo
+        ]
+
 defaultInstanceConfig :: InstanceConfig
 defaultInstanceConfig = InstanceConfig {
       instanceServiceUrlDefault = ""
@@ -206,17 +242,31 @@ registerInstance eConn@EurekaConnection { eConnManager,
     registerRequest url = request {
           method = methodPost
         , requestHeaders = [("Content-Type", "application/json")]
-        , requestBody = RequestBodyLBS $ encode $ object ["instance" .= eConnInstanceInfo eConn]
+        , requestBody = RequestBodyLBS $ encode $ object [
+            "instance" .= eConnInstanceInfo eConn
+            ]
         }
       where
         request = fromJust $ parseUrl (addPath url "apps/" ++ instanceAppName)
 
-eConnInstanceInfo :: EurekaConnection -> Value
+eConnInstanceInfo :: EurekaConnection -> InstanceInfo
 eConnInstanceInfo EurekaConnection {
       eConnDataCenterInfo
-    } = object [
-        "datacenter" .= eConnDataCenterInfo
-    ]
+    , eConnInstanceConfig = InstanceConfig {
+          instanceAppName
+        , instanceNonSecurePort
+        , instanceSecurePort
+        }
+    } = InstanceInfo {
+      instanceInfoHostName = "FIXME"
+    , instanceInfoAppName = instanceAppName
+    , instanceInfoVipAddr = "FIXME"
+    , instanceInfoSecureVipAddr = "FIXME"
+    , instanceInfoStatus = "FIXME"
+    , instanceInfoPort = instanceNonSecurePort
+    , instanceInfoSecurePort = instanceSecurePort
+    , instanceInfoDataCenterInfo = eConnDataCenterInfo
+    }
 
 -- | Add an additional path fragment to a base URL.
 --
