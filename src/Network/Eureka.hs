@@ -67,6 +67,14 @@ data InstanceConfig = InstanceConfig {
       -- isn't a concern.
     , instanceSecurePort :: Int
       -- ^ Port number that you can use to access this instance securely.
+    , instanceVirtualHostname :: Maybe String
+      -- ^ A possible override for the "virtual hostname" or VIP that you should
+      -- use to access this instance. This hostname should have the form
+      -- "hostname:port". If Nothing, just use hostname + secure port.
+    , instanceSecureVirtualHostname :: Maybe String
+      -- ^ A possible override for the "virtual hostname" or VIP that you should
+      -- use to access this instance securely. This hostname should have the
+      -- form "hostname:port". If Nothing, just use hostname + secure port.
     , instanceStatusPageUrl :: Maybe String
       -- ^ URL to use to access this instance's status page.
     , instanceHomePageUrl :: String
@@ -176,6 +184,8 @@ defaultInstanceConfig = InstanceConfig {
     , instanceSecurePortEnabled = False
     , instanceNonSecurePort = 80
     , instanceSecurePort = 443
+    , instanceVirtualHostname = Nothing
+    , instanceSecureVirtualHostname = Nothing
     , instanceStatusPageUrl = Nothing
     , instanceHomePageUrl = ""
     , instanceMetadata = Map.empty
@@ -266,7 +276,7 @@ registerInstance eConn@EurekaConnection { eConnManager,
         request = fromJust $ parseUrl (addPath url "apps/" ++ instanceAppName)
 
 eConnInstanceInfo :: EurekaConnection -> InstanceInfo
-eConnInstanceInfo EurekaConnection {
+eConnInstanceInfo eConn@EurekaConnection {
       eConnDataCenterInfo
     , eConnInstanceConfig = InstanceConfig {
           instanceAppName
@@ -277,13 +287,33 @@ eConnInstanceInfo EurekaConnection {
     } = InstanceInfo {
       instanceInfoHostName = eConnHostname
     , instanceInfoAppName = instanceAppName
-    , instanceInfoVipAddr = "FIXME"
-    , instanceInfoSecureVipAddr = "FIXME"
+    , instanceInfoVipAddr = eConnVirtualHostname eConn
+    , instanceInfoSecureVipAddr = eConnSecureVirtualHostname eConn
     , instanceInfoStatus = Starting
     , instanceInfoPort = instanceNonSecurePort
     , instanceInfoSecurePort = instanceSecurePort
     , instanceInfoDataCenterInfo = eConnDataCenterInfo
     }
+
+-- | Get the virtual hostname from the Eureka connection, taking the real
+-- hostname and instance configuration into account.
+eConnVirtualHostname :: EurekaConnection -> String
+eConnVirtualHostname EurekaConnection { eConnHostname
+                                      , eConnInstanceConfig = InstanceConfig {
+                                          instanceNonSecurePort,
+                                          instanceVirtualHostname } } =
+    case instanceVirtualHostname of
+        Nothing -> eConnHostname ++ ":" ++ show instanceNonSecurePort
+        Just s -> s
+
+eConnSecureVirtualHostname :: EurekaConnection -> String
+eConnSecureVirtualHostname EurekaConnection { eConnHostname
+                                            , eConnInstanceConfig = InstanceConfig {
+                                                instanceSecurePort,
+                                                instanceSecureVirtualHostname } } =
+    case instanceSecureVirtualHostname of
+        Nothing -> eConnHostname ++ ":" ++ show instanceSecurePort
+        Just s -> s
 
 -- | Add an additional path fragment to a base URL.
 --
