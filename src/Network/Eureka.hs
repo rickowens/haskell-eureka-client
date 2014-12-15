@@ -126,7 +126,7 @@ data InstanceInfo = InstanceInfo {
     , instanceInfoAppName :: String
     , instanceInfoVipAddr :: String
     , instanceInfoSecureVipAddr :: String
-    , instanceInfoStatus :: String
+    , instanceInfoStatus :: InstanceStatus
     , instanceInfoPort :: Int
     , instanceInfoSecurePort :: Int
     , instanceInfoDataCenterInfo :: DataCenterInfo
@@ -152,6 +152,19 @@ instance ToJSON InstanceInfo where
         "securePort" .= instanceInfoSecurePort,
         "dataCenterInfo" .= instanceInfoDataCenterInfo
         ]
+
+data InstanceStatus = Up | Down | Starting | OutOfService | Unknown
+                    deriving Show
+
+instance ToJSON InstanceStatus where
+    -- N.B. OutOfService and Unknown aren't available according to the schema in
+    -- https://github.com/Netflix/eureka/wiki/Eureka-REST-operations. What can
+    -- we post in those cases?
+    toJSON Up = "UP"
+    toJSON Down = "DOWN"
+    toJSON Starting = "STARTING"
+    toJSON OutOfService = "OUT_OF_SERVICE"
+    toJSON Unknown = "UNKNOWN"
 
 defaultInstanceConfig :: InstanceConfig
 defaultInstanceConfig = InstanceConfig {
@@ -262,7 +275,7 @@ eConnInstanceInfo EurekaConnection {
     , instanceInfoAppName = instanceAppName
     , instanceInfoVipAddr = "FIXME"
     , instanceInfoSecureVipAddr = "FIXME"
-    , instanceInfoStatus = "FIXME"
+    , instanceInfoStatus = Starting
     , instanceInfoPort = instanceNonSecurePort
     , instanceInfoSecurePort = instanceSecurePort
     , instanceInfoDataCenterInfo = eConnDataCenterInfo
