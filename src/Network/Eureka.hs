@@ -100,6 +100,7 @@ type AmazonInstanceType = String
 data DataCenterInfo = DataCenterMyOwn
                     | DataCenterAmazon {
       amazonAmiId :: String
+    , amazonAmiLaunchIndex :: String
     , amazonInstanceId :: String
     , amazonInstanceType :: AmazonInstanceType
     , amazonLocalIpv4 :: String
@@ -114,6 +115,7 @@ instance ToJSON DataCenterInfo where
         ]
     toJSON DataCenterAmazon {
           amazonAmiId
+        , amazonAmiLaunchIndex
         , amazonInstanceId
         , amazonInstanceType
         , amazonLocalIpv4
@@ -124,7 +126,7 @@ instance ToJSON DataCenterInfo where
         "name" .= ("Amazon" :: String),
         "metadata" .= object [
             "ami-id" .= amazonAmiId,
-            "ami-launch-index" .= ("FIXME" :: String),
+            "ami-launch-index" .= amazonAmiLaunchIndex,
             "instance-type" .= amazonInstanceType,
             "instance-id" .= amazonInstanceId,
             "local-ipv4" .= amazonLocalIpv4,
@@ -140,6 +142,7 @@ discoverDataCenterAmazon :: Manager -> IO DataCenterInfo
 discoverDataCenterAmazon manager = do
     DataCenterAmazon <$>
         getMeta "ami-id" <*>
+        getMeta "ami-launch-index" <*>
         getMeta "instance-id" <*>
         getMeta "instance-type" <*>
         getMeta "local-ipv4" <*>
