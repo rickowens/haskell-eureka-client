@@ -25,10 +25,10 @@ library
     base,
     bytestring,
     containers,
-    hostname,
     hslogger,
     http-client,
     http-types,
+    network,
     text,
     time
   hs-source-dirs:      src
@@ -43,10 +43,10 @@ executable test
     base,
     bytestring,
     containers,
-    hostname,
     hslogger,
     http-client,
     http-types,
+    network,
     text,
     time
   hs-source-dirs:     src

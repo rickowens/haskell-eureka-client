@@ -15,7 +15,10 @@ import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Exception (bracket, throw, try, SomeException)
 import Control.Monad (foldM, when)
 import Control.Monad.Fix (mfix)
-import Network.HostName (HostName, getHostName)
+import Network.BSD (getHostName)
+import Network.Socket (AddrInfo(addrAddress, addrFamily),
+                       Family(AF_INET), HostName, NameInfoFlag(NI_NUMERICHOST),
+                       defaultHints, getAddrInfo, getNameInfo)
 import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             RequestBody(RequestBodyLBS),
                             Request(checkStatus, method, requestBody,
@@ -235,6 +238,8 @@ data EurekaConnection = EurekaConnection {
       -- ^ HTTP manager that we use to make requests.
     , eConnHostname :: HostName
       -- ^ Base hostname gotten from the system at startup.
+    , eConnHostIpv4 :: String
+      -- ^ IPv4 address we got for the above hostname at startup.
     }
 
 instance Show EurekaConnection where
@@ -355,7 +360,7 @@ eConnPublicIpv4 :: EurekaConnection -> String
 eConnPublicIpv4 EurekaConnection {
     eConnDataCenterInfo = DataCenterAmazon {
             amazonPublicIpv4 } } = amazonPublicIpv4
-eConnPublicIpv4 _ = error "FIXME: lookup gethostbyname for hostname"
+eConnPublicIpv4 EurekaConnection { eConnHostIpv4 } = eConnHostIpv4
 
 -- | Add an additional path fragment to a base URL.
 --
@@ -421,6 +426,9 @@ connectEureka manager
     heartbeatThreadId <- forkIO . heartbeatThread $ econn
     instanceInfoThreadId <- forkIO . instanceInfoThread $ econn
     hostname <- getHostName
+    hostResolved <- getAddrInfo (Just myHints) (Just hostname) Nothing
+    (Just hostIpv4, _) <- getNameInfo [NI_NUMERICHOST] True False
+                          . addrAddress . head $ hostResolved
     return EurekaConnection {
           eConnEurekaConfig = eConfig
         , eConnInstanceConfig = iConfig
@@ -429,11 +437,13 @@ connectEureka manager
         , eConnManager = manager
         , eConnDataCenterInfo = dataCenterInfo
         , eConnHostname = hostname
+        , eConnHostIpv4 = hostIpv4
         }
   where
     heartbeatThread :: EurekaConnection -> IO ()
     heartbeatThread = repeating heartbeatInterval . postHeartbeat
     instanceInfoThread = repeating instanceInfoInterval . updateInstanceInfo
+    myHints = defaultHints { addrFamily = AF_INET }
 
 -- | Make a request of each of the available servers. In case a server fails,
 -- try consecutive servers until one works (or we run out of servers). If all
