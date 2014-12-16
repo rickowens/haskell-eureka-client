@@ -26,9 +26,9 @@ library
     bytestring,
     containers,
     hostname,
+    hslogger,
     http-client,
     http-types,
-    old-locale,
     text,
     time
   hs-source-dirs:      src
@@ -44,9 +44,9 @@ executable test
     bytestring,
     containers,
     hostname,
+    hslogger,
     http-client,
     http-types,
-    old-locale,
     text,
     time
   hs-source-dirs:     src

@@ -6,8 +6,6 @@ module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
 
 import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
 import Data.List (elemIndex, find, nub)
-import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Time.Format (formatTime, parseTime)
 import Data.Map (Map, (!))
 import Data.Maybe (fromJust)
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
@@ -22,7 +20,7 @@ import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             parseUrl,
                             withManager, withResponse)
 import Network.HTTP.Types.Method (methodPost)
-import System.Locale (defaultTimeLocale)
+import System.Log.Logger (debugM)
 import qualified Data.Map as Map
 
 type AvailabilityZone = String
@@ -328,18 +326,13 @@ addPath base additional = baseWithSlash ++ additional
 disconnectEureka :: EurekaConnection -> IO ()
 disconnectEureka _ = return ()
 
-formatISO8601 :: UTCTime -> String
-formatISO8601 t = formatTime defaultTimeLocale "%FT%T%QZ" t
-
 postHeartbeat :: EurekaConnection -> IO ()
 postHeartbeat conn = do
-    now <- getCurrentTime
-    print $ "Posting heartbeat " ++ show conn ++ " at " ++ formatISO8601 now
+    debugM "Eureka.postHeartbeat" $ "Posting heartbeat " ++ show conn
 
 updateInstanceInfo :: EurekaConnection -> IO ()
 updateInstanceInfo conn = do
-    now <- getCurrentTime
-    print $ "Updating instance info " ++ show conn ++ " at " ++ formatISO8601 now
+    debugM "Eureka.updateInstanceInfo" $ "Updating instance info " ++ show conn
 
 connectEureka :: Manager
               -> EurekaConfig -> InstanceConfig -> DataCenterInfo
