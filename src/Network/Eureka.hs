@@ -1,6 +1,7 @@
 {-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        defaultEurekaConfig, defaultInstanceConfig,
+                       discoverDataCenterAmazon,
                        DataCenterInfo(DataCenterMyOwn),
                        EurekaConnection, AvailabilityZone, Region) where
 
@@ -8,6 +9,8 @@ import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
 import Data.List (elemIndex, find, nub)
 import Data.Map (Map, (!))
 import Data.Maybe (fromJust)
+import Data.Text.Encoding (decodeUtf8)
+import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Exception (bracket, throw, try, SomeException)
 import Control.Monad (foldM, when)
@@ -17,13 +20,15 @@ import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             RequestBody(RequestBodyLBS),
                             Request(checkStatus, method, requestBody,
                                     requestHeaders),
-                            defaultManagerSettings,
-                            parseUrl, responseStatus,
+                            defaultManagerSettings, httpLbs,
+                            parseUrl, responseStatus, responseBody,
                             withManager, withResponse)
 import Network.HTTP.Types.Method (methodPost, methodPut)
 import Network.HTTP.Types.Status (status404)
 import System.Log.Logger (debugM, errorM, infoM)
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
+import qualified Data.Text as T
 
 type AvailabilityZone = String
 type Region = String
@@ -125,6 +130,25 @@ instance ToJSON DataCenterInfo where
             "public-ipv4" .= amazonPublicIpv4
             ]
         ]
+
+-- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
+-- fill in an DataCenterAmazon.
+discoverDataCenterAmazon :: Manager -> IO DataCenterInfo
+discoverDataCenterAmazon manager = do
+    DataCenterAmazon <$>
+        getMeta "ami-id" <*>
+        getMeta "instance-id" <*>
+        getMeta "instance-type" <*>
+        getMeta "local-ipv4" <*>
+        getMeta "placement/availability-zone" <*>
+        getMeta "public-hostname" <*>
+        getMeta "public-ipv4"
+  where
+    getMeta :: String -> IO String
+    getMeta pathName = fromBS . responseBody <$> httpLbs metaRequest manager
+      where
+        metaRequest = fromJust . parseUrl $ "http://169.254.169.254/latest/meta-data/" ++ pathName
+        fromBS = T.unpack . decodeUtf8 . LBS.toStrict
 
 -- | Wire format for "instance infos".
 --
