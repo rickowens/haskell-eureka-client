@@ -9,18 +9,20 @@ import Data.List (elemIndex, find, nub)
 import Data.Map (Map, (!))
 import Data.Maybe (fromJust)
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
-import Control.Exception (bracket, throw, try)
-import Control.Monad (foldM)
+import Control.Exception (bracket, throw, try, SomeException)
+import Control.Monad (foldM, when)
 import Control.Monad.Fix (mfix)
 import Network.HostName (HostName, getHostName)
 import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             RequestBody(RequestBodyLBS),
-                            Request(method, requestBody, requestHeaders),
+                            Request(checkStatus, method, requestBody,
+                                    requestHeaders),
                             defaultManagerSettings,
-                            parseUrl,
+                            parseUrl, responseStatus,
                             withManager, withResponse)
-import Network.HTTP.Types.Method (methodPost)
-import System.Log.Logger (debugM)
+import Network.HTTP.Types.Method (methodPost, methodPut)
+import Network.HTTP.Types.Status (status404)
+import System.Log.Logger (debugM, errorM, infoM)
 import qualified Data.Map as Map
 
 type AvailabilityZone = String
@@ -327,8 +329,38 @@ disconnectEureka :: EurekaConnection -> IO ()
 disconnectEureka _ = return ()
 
 postHeartbeat :: EurekaConnection -> IO ()
-postHeartbeat conn = do
-    debugM "Eureka.postHeartbeat" $ "Posting heartbeat " ++ show conn
+postHeartbeat eConn@EurekaConnection {
+    eConnInstanceConfig = InstanceConfig { instanceAppName },
+    eConnManager
+    } = do
+    -- N.B. This is more-or-less what's described by the Control.Exception
+    -- documentation under "Catching all exceptions". We use try instead of
+    -- catch because we aren't interested in asynchronous exceptions, so
+    -- hopefully this won't accidentally catch too many exceptions.
+    result <- try reallyPostHeartbeat
+    case result of
+        Right _ -> return ()
+        Left err -> let errMsg = show (err :: SomeException) in
+            errorM "Eureka.postHeartbeat" $
+            appPath ++ " - was unable to send heartbeat! " ++ errMsg
+  where
+    reallyPostHeartbeat = do
+        responseStatus <- makeRequest eConn sendHeartbeat
+        debugM "Eureka.postHeartbeat" $
+            appPath ++ " - Heartbeat status: " ++ show responseStatus
+        when (responseStatus == status404) $ do
+            infoM "Eureka.postHeartbeat" $
+                appPath ++ " - Re-registering /apps" ++ instanceAppName
+            registerInstance eConn
+    appPath = eConnAppPath eConn
+    sendHeartbeat url = withResponse (heartbeatRequest url) eConnManager $
+                        \resp -> return $ responseStatus resp
+    heartbeatRequest url = request {
+          method = methodPut,
+          checkStatus = \_ _ _ -> Nothing   -- so we can reregister if we get a 404
+          }
+      where
+        request = fromJust . parseUrl . addPath url $ eConnAppPath eConn
 
 updateInstanceInfo :: EurekaConnection -> IO ()
 updateInstanceInfo conn = do
@@ -397,7 +429,20 @@ availabilityZone EurekaConnection {
 availabilityZone EurekaConnection {eConnEurekaConfig} =
     head $ availabilityZonesFromConfig eConnEurekaConfig ++ ["default"]
 
+eConnAppPath :: EurekaConnection -> String
+eConnAppPath eConn@EurekaConnection {
+    eConnInstanceConfig = InstanceConfig {instanceAppName}
+    } =
+    "apps/" ++ instanceAppName ++ "/" ++ eConnInstanceId eConn
 
+-- | Produce an ID to use when identifying this instance.  If running in a
+-- datacenter, this gets the ID of the machine.  Otherwise, falls back to the
+-- hostname.
+eConnInstanceId :: EurekaConnection -> String
+eConnInstanceId EurekaConnection {
+    eConnDataCenterInfo = DataCenterAmazon { amazonInstanceId }
+    } = amazonInstanceId
+eConnInstanceId EurekaConnection { eConnHostname } = eConnHostname
 
 -- | Perform an action every 'delay' seconds.
 -- Delays are not exact; we use threadDelay to schedule the repetition.
