@@ -8,7 +8,7 @@ module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
 import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
 import Data.List (elemIndex, find, nub)
 import Data.Map (Map, (!))
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Text.Encoding (decodeUtf8)
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
@@ -139,7 +139,7 @@ instance ToJSON DataCenterInfo where
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
 -- fill in an DataCenterAmazon.
 discoverDataCenterAmazon :: Manager -> IO DataCenterInfo
-discoverDataCenterAmazon manager = do
+discoverDataCenterAmazon manager =
     DataCenterAmazon <$>
         getMeta "ami-id" <*>
         getMeta "ami-launch-index" <*>
@@ -273,8 +273,7 @@ withEureka eConfig iConfig iInfo m =
 eurekaUrlsByProximity :: EurekaConfig -> AvailabilityZone -> [String]
 eurekaUrlsByProximity eConfig thisZone =
     nub
-    . concat
-    . map (eurekaServerServiceUrlsForZone eConfig)
+    . concatMap (eurekaServerServiceUrlsForZone eConfig)
     . thisZoneFirst
     . availabilityZonesFromConfig
     $ eConfig
@@ -298,7 +297,7 @@ registerInstance eConn@EurekaConnection { eConnManager,
         eConnInstanceConfig = InstanceConfig {instanceAppName}
     } = makeRequest eConn sendRegister
   where
-    sendRegister url = withResponse (registerRequest url) eConnManager $ \_ -> do
+    sendRegister url = withResponse (registerRequest url) eConnManager $ \_ ->
         return ()
     registerRequest url = request {
           method = methodPost
@@ -338,18 +337,18 @@ eConnVirtualHostname eConn@EurekaConnection {
     eConnInstanceConfig = InstanceConfig {
             instanceNonSecurePort,
             instanceVirtualHostname } } =
-    case instanceVirtualHostname of
-        Nothing -> (eConnPublicHostname eConn) ++ ":" ++ show instanceNonSecurePort
-        Just s -> s
+    fromMaybe
+      (eConnPublicHostname eConn ++ ":" ++ show instanceNonSecurePort)
+      instanceVirtualHostname
 
 eConnSecureVirtualHostname :: EurekaConnection -> String
 eConnSecureVirtualHostname eConn@EurekaConnection {
     eConnInstanceConfig = InstanceConfig {
             instanceSecurePort,
             instanceSecureVirtualHostname } } =
-    case instanceSecureVirtualHostname of
-        Nothing -> (eConnPublicHostname eConn) ++ ":" ++ show instanceSecurePort
-        Just s -> s
+    fromMaybe
+      (eConnPublicHostname eConn ++ ":" ++ show instanceSecurePort)
+      instanceSecureVirtualHostname
 
 -- | Return the best hostname available.
 eConnPublicHostname :: EurekaConnection -> String
@@ -413,7 +412,7 @@ postHeartbeat eConn@EurekaConnection {
         request = fromJust . parseUrl . addPath url $ eConnAppPath eConn
 
 updateInstanceInfo :: EurekaConnection -> IO ()
-updateInstanceInfo conn = do
+updateInstanceInfo conn =
     debugM "Eureka.updateInstanceInfo" $ "Updating instance info " ++ show conn
 
 connectEureka :: Manager
@@ -465,17 +464,17 @@ makeRequest conn@EurekaConnection {eConnEurekaConfig}
 
 availabilityZonesFromConfig :: EurekaConfig -> [AvailabilityZone]
 availabilityZonesFromConfig EurekaConfig{eurekaAvailabilityZones, eurekaRegion} =
-    case Map.lookup eurekaRegion eurekaAvailabilityZones of
-        Nothing -> error $ "couldn't find region " ++ show eurekaRegion
-                           ++ " in zones config " ++ show eurekaAvailabilityZones
-        Just zones -> zones
+    fromMaybe
+        (error $ "couldn't find region " ++ show eurekaRegion ++
+          " in zones config " ++ show eurekaAvailabilityZones)
+        (Map.lookup eurekaRegion eurekaAvailabilityZones)
 
 eurekaServerServiceUrlsForZone :: EurekaConfig -> AvailabilityZone -> [String]
 eurekaServerServiceUrlsForZone EurekaConfig {eurekaServerServiceUrls} zone =
-    case Map.lookup zone eurekaServerServiceUrls of
-        Nothing -> error $ "couldn't find any Eureka server URLs for zone " ++ show zone
-                           ++ " in service config " ++ show eurekaServerServiceUrls
-        Just urls -> urls
+    fromMaybe
+        (error $ "couldn't find any Eureka server URLs for zone " ++ show zone
+          ++ " in service config " ++ show eurekaServerServiceUrls)
+        (Map.lookup zone eurekaServerServiceUrls)
 
 availabilityZone :: EurekaConnection -> AvailabilityZone
 availabilityZone EurekaConnection {
@@ -513,4 +512,4 @@ repeating i a = loop
 -- > rotations [1..4]
 -- [[1,2,3,4],[2,3,4,1],[3,4,1,2],[4,1,2,3]]
 rotations :: [a] -> [[a]]
-rotations lst = map (take (length lst) . flip drop (cycle lst)) $ [0..length lst - 1]
+rotations lst = map (take (length lst) . flip drop (cycle lst)) [0..length lst - 1]

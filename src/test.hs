@@ -7,6 +7,7 @@ import Network.Eureka (withEureka,
     defaultInstanceConfig)
 import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)
+import Control.Monad (replicateM_)
 import Network.HTTP.Client (defaultManagerSettings, withManager)
 import System.Environment (getArgs)
 import System.IO (stdout)
@@ -26,8 +27,8 @@ main = do
     updateGlobalLogger "" (setLevel level . setHandlers handlers)
 
     dataCenterInfo <- withManager defaultManagerSettings discoverDataCenterAmazon
-    withEureka (myEurekaConfig commandLineServer) myInstanceConfig dataCenterInfo $ \_ -> do
-        sequence_ $ replicate 20 $ threadDelay $ 1000 * 1000
+    withEureka (myEurekaConfig commandLineServer) myInstanceConfig dataCenterInfo $ \_ ->
+        replicateM_ 20 $ threadDelay $ 1000 * 1000
   where
     myEurekaConfig serverUrl = defaultEurekaConfig {
         eurekaInstanceInfoReplicationInterval = 1,
