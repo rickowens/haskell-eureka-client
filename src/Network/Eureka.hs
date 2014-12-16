@@ -7,7 +7,7 @@ module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
 
 import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
 import Data.List (elemIndex, find, nub)
-import Data.Map (Map, (!))
+import Data.Map (Map)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text.Encoding (decodeUtf8)
 import Control.Applicative ((<$>), (<*>))
