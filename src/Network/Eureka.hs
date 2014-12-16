@@ -322,22 +322,29 @@ eConnInstanceInfo eConn@EurekaConnection {
 -- | Get the virtual hostname from the Eureka connection, taking the real
 -- hostname and instance configuration into account.
 eConnVirtualHostname :: EurekaConnection -> String
-eConnVirtualHostname EurekaConnection { eConnHostname
-                                      , eConnInstanceConfig = InstanceConfig {
-                                          instanceNonSecurePort,
-                                          instanceVirtualHostname } } =
+eConnVirtualHostname eConn@EurekaConnection {
+    eConnInstanceConfig = InstanceConfig {
+            instanceNonSecurePort,
+            instanceVirtualHostname } } =
     case instanceVirtualHostname of
-        Nothing -> eConnHostname ++ ":" ++ show instanceNonSecurePort
+        Nothing -> (eConnPublicHostname eConn) ++ ":" ++ show instanceNonSecurePort
         Just s -> s
 
 eConnSecureVirtualHostname :: EurekaConnection -> String
-eConnSecureVirtualHostname EurekaConnection { eConnHostname
-                                            , eConnInstanceConfig = InstanceConfig {
-                                                instanceSecurePort,
-                                                instanceSecureVirtualHostname } } =
+eConnSecureVirtualHostname eConn@EurekaConnection {
+    eConnInstanceConfig = InstanceConfig {
+            instanceSecurePort,
+            instanceSecureVirtualHostname } } =
     case instanceSecureVirtualHostname of
-        Nothing -> eConnHostname ++ ":" ++ show instanceSecurePort
+        Nothing -> (eConnPublicHostname eConn) ++ ":" ++ show instanceSecurePort
         Just s -> s
+
+-- | Return the best hostname available.
+eConnPublicHostname :: EurekaConnection -> String
+eConnPublicHostname EurekaConnection {
+    eConnDataCenterInfo = DataCenterAmazon {
+            amazonPublicHostname } } = amazonPublicHostname
+eConnPublicHostname EurekaConnection { eConnHostname } = eConnHostname
 
 -- | Add an additional path fragment to a base URL.
 --
