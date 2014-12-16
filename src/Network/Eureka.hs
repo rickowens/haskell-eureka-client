@@ -157,6 +157,7 @@ discoverDataCenterAmazon manager = do
 data InstanceInfo = InstanceInfo {
       instanceInfoHostName :: HostName
     , instanceInfoAppName :: String
+    , instanceInfoIpAddr :: String
     , instanceInfoVipAddr :: String
     , instanceInfoSecureVipAddr :: String
     , instanceInfoStatus :: InstanceStatus
@@ -169,6 +170,7 @@ instance ToJSON InstanceInfo where
     toJSON InstanceInfo {
           instanceInfoHostName
         , instanceInfoAppName
+        , instanceInfoIpAddr
         , instanceInfoVipAddr
         , instanceInfoSecureVipAddr
         , instanceInfoStatus
@@ -178,6 +180,7 @@ instance ToJSON InstanceInfo where
         } = object [
         "hostName" .= instanceInfoHostName,
         "app" .= instanceInfoAppName,
+        "ipAddr" .= instanceInfoIpAddr,
         "vipAddr" .= instanceInfoVipAddr,
         "secureVipAddr" .= instanceInfoSecureVipAddr,
         "status" .= instanceInfoStatus,
@@ -311,6 +314,7 @@ eConnInstanceInfo eConn@EurekaConnection {
     } = InstanceInfo {
       instanceInfoHostName = eConnHostname
     , instanceInfoAppName = instanceAppName
+    , instanceInfoIpAddr = eConnPublicIpv4 eConn
     , instanceInfoVipAddr = eConnVirtualHostname eConn
     , instanceInfoSecureVipAddr = eConnSecureVirtualHostname eConn
     , instanceInfoStatus = Starting
@@ -345,6 +349,13 @@ eConnPublicHostname EurekaConnection {
     eConnDataCenterInfo = DataCenterAmazon {
             amazonPublicHostname } } = amazonPublicHostname
 eConnPublicHostname EurekaConnection { eConnHostname } = eConnHostname
+
+-- | Return the best IP address available.
+eConnPublicIpv4 :: EurekaConnection -> String
+eConnPublicIpv4 EurekaConnection {
+    eConnDataCenterInfo = DataCenterAmazon {
+            amazonPublicIpv4 } } = amazonPublicIpv4
+eConnPublicIpv4 _ = error "FIXME: lookup gethostbyname for hostname"
 
 -- | Add an additional path fragment to a base URL.
 --
