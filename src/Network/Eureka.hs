@@ -299,15 +299,13 @@ registerInstance eConn@EurekaConnection { eConnManager,
   where
     sendRegister url = withResponse (registerRequest url) eConnManager $ \_ ->
         return ()
-    registerRequest url = request {
+    registerRequest url = (parseUrlWithAdded url $ "apps/" ++ instanceAppName) {
           method = methodPost
         , requestHeaders = [("Content-Type", "application/json")]
         , requestBody = RequestBodyLBS $ encode $ object [
             "instance" .= eConnInstanceInfo eConn
             ]
         }
-      where
-        request = fromJust $ parseUrl (addPath url "apps/" ++ instanceAppName)
 
 eConnInstanceInfo :: EurekaConnection -> InstanceInfo
 eConnInstanceInfo eConn@EurekaConnection {
@@ -404,12 +402,10 @@ postHeartbeat eConn@EurekaConnection {
     appPath = eConnAppPath eConn
     sendHeartbeat url = withResponse (heartbeatRequest url) eConnManager $
                         \resp -> return $ responseStatus resp
-    heartbeatRequest url = request {
+    heartbeatRequest url = (parseUrlWithAppPath url eConn) {
           method = methodPut,
           checkStatus = \_ _ _ -> Nothing   -- so we can reregister if we get a 404
           }
-      where
-        request = fromJust . parseUrl . addPath url $ eConnAppPath eConn
 
 updateInstanceInfo :: EurekaConnection -> IO ()
 updateInstanceInfo conn =
@@ -497,6 +493,12 @@ eConnInstanceId EurekaConnection {
     eConnDataCenterInfo = DataCenterAmazon { amazonInstanceId }
     } = amazonInstanceId
 eConnInstanceId EurekaConnection { eConnHostname } = eConnHostname
+
+parseUrlWithAdded :: String -> String -> Request
+parseUrlWithAdded url = fromJust . parseUrl . addPath url
+
+parseUrlWithAppPath :: String -> EurekaConnection -> Request
+parseUrlWithAppPath url = parseUrlWithAdded url . eConnAppPath
 
 -- | Perform an action every 'delay' seconds.
 -- Delays are not exact; we use threadDelay to schedule the repetition.
