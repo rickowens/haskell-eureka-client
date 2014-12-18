@@ -11,7 +11,7 @@ import Data.Map (Map)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text.Encoding (decodeUtf8)
 import Control.Applicative ((<$>), (<*>))
-import Control.Concurrent (ThreadId, forkIO, threadDelay)
+import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
 import Control.Exception (bracket, throw, try, SomeException)
 import Control.Monad (foldM, when)
 import Control.Monad.Fix (mfix)
@@ -26,7 +26,7 @@ import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             defaultManagerSettings, httpLbs,
                             parseUrl, responseStatus, responseBody,
                             withManager, withResponse)
-import Network.HTTP.Types.Method (methodPost, methodPut)
+import Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
 import Network.HTTP.Types.Status (status404)
 import System.Log.Logger (debugM, errorM, infoM)
 import qualified Data.ByteString.Lazy as LBS
@@ -267,6 +267,10 @@ withEureka eConfig iConfig iInfo m =
         registerInstance eConn
         m eConn
 
+-- FIXME
+setStatus :: EurekaConnection -> InstanceStatus -> IO ()
+setStatus _ _ = return ()
+
 -- | Provide a list of Eureka servers, with the ones in the same AZ as us first.
 -- Any of these Eureka servers are acceptable to maintain health in the face of
 -- failure, but the ones in the same zone have lower latency, so are preferred.
@@ -373,7 +377,42 @@ addPath base additional = baseWithSlash ++ additional
     baseWithSlash = if last base == '/' then base else base ++ "/"
 
 disconnectEureka :: EurekaConnection -> IO ()
-disconnectEureka _ = return ()
+disconnectEureka eConn@EurekaConnection {
+    eConnHeartbeatThread, eConnInstanceInfoReplicatorThread
+    } = do
+    killThread eConnHeartbeatThread
+    killThread eConnInstanceInfoReplicatorThread
+    setStatus eConn Down
+    unregister eConn
+
+
+unregister :: EurekaConnection -> IO ()
+unregister eConn@EurekaConnection { eConnManager } = do
+    -- N.B. This also catches all exceptions (see above), which the Java version
+    -- does, presumably because unregistering could be something that happens as
+    -- the instance crashes, and we don't want to mask the legitimate failure
+    -- with some other frivolous failure that comes out of our failure to
+    -- deregister.
+    result <- try reallyUnregister
+    case result of
+        Right _ -> return ()
+        Left err -> let errMsg = show (err :: SomeException) in
+            errorM "Eureka.unregister" $
+            appPath ++ " - de-registration failed " ++ errMsg
+  where
+    reallyUnregister = do
+        responseStatus <- makeRequest eConn sendUnregister
+        -- the two spaces between "deregister" and "status" are copied from the
+        -- Java implementation
+        infoM "Eureka.unregister" $
+                appPath ++ " - deregister  status: " ++ show responseStatus
+    appPath = eConnAppPath eConn
+    sendUnregister url = withResponse (unregisterRequest url) eConnManager $
+                        \resp -> return $ responseStatus resp
+    unregisterRequest url = (parseUrlWithAppPath url eConn) {
+          method = methodDelete
+          }
+
 
 postHeartbeat :: EurekaConnection -> IO ()
 postHeartbeat eConn@EurekaConnection {
