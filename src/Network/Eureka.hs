@@ -12,6 +12,7 @@ import Data.Maybe (fromJust, fromMaybe)
 import Data.Text.Encoding (decodeUtf8)
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
+import Control.Concurrent.STM (TVar, atomically, newTVar, writeTVar)
 import Control.Exception (bracket, throw, try, SomeException)
 import Control.Monad (foldM, when)
 import Control.Monad.Fix (mfix)
@@ -243,6 +244,8 @@ data EurekaConnection = EurekaConnection {
       -- ^ Base hostname gotten from the system at startup.
     , eConnHostIpv4 :: String
       -- ^ IPv4 address we got for the above hostname at startup.
+    , eConnStatus :: TVar InstanceStatus
+      -- ^ Current status of this instance.
     }
 
 instance Show EurekaConnection where
@@ -267,9 +270,10 @@ withEureka eConfig iConfig iInfo m =
         registerInstance eConn
         m eConn
 
--- FIXME
 setStatus :: EurekaConnection -> InstanceStatus -> IO ()
-setStatus _ _ = return ()
+setStatus EurekaConnection { eConnStatus } newStatus =
+    atomically $ writeTVar eConnStatus newStatus
+    -- FIXME: post to Eureka's apps/appname/instanceid/status?value=newStatus
 
 -- | Provide a list of Eureka servers, with the ones in the same AZ as us first.
 -- Any of these Eureka servers are acceptable to maintain health in the face of
@@ -459,9 +463,12 @@ connectEureka manager
         }
     iConfig@InstanceConfig{
         instanceLeaseRenewalInterval=heartbeatInterval
+        , instanceEnabledOnInit
         } dataCenterInfo = mfix $ \econn -> do
     heartbeatThreadId <- forkIO . heartbeatThread $ econn
     instanceInfoThreadId <- forkIO . instanceInfoThread $ econn
+    statusVar <- atomically $ newTVar (if instanceEnabledOnInit then Up else Starting)
+
     hostname <- getHostName
     hostResolved <- getAddrInfo (Just myHints) (Just hostname) Nothing
     (Just hostIpv4, _) <- getNameInfo [NI_NUMERICHOST] True False
@@ -475,6 +482,7 @@ connectEureka manager
         , eConnDataCenterInfo = dataCenterInfo
         , eConnHostname = hostname
         , eConnHostIpv4 = hostIpv4
+        , eConnStatus = statusVar
         }
   where
     heartbeatThread :: EurekaConnection -> IO ()
