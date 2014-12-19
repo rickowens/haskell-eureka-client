@@ -9,7 +9,7 @@ import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
 import Data.List (elemIndex, find, nub)
 import Data.Map (Map)
 import Data.Maybe (fromJust, fromMaybe)
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
 import Control.Concurrent.STM (TVar, atomically, newTVar, readTVar, writeTVar)
@@ -25,11 +25,13 @@ import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             Request(checkStatus, method, requestBody,
                                     requestHeaders),
                             defaultManagerSettings, httpLbs,
-                            parseUrl, responseStatus, responseBody,
+                            parseUrl, queryString,
+                            responseStatus, responseBody,
                             withManager, withResponse)
 import Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
 import Network.HTTP.Types.Status (status404)
 import System.Log.Logger (debugM, errorM, infoM)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
 import qualified Data.Text as T
@@ -271,9 +273,16 @@ withEureka eConfig iConfig iInfo m =
         m eConn
 
 setStatus :: EurekaConnection -> InstanceStatus -> IO ()
-setStatus EurekaConnection { eConnStatus } newStatus =
+setStatus eConn@EurekaConnection { eConnManager, eConnStatus } newStatus = do
     atomically $ writeTVar eConnStatus newStatus
-    -- FIXME: post to Eureka's apps/appname/instanceid/status?value=newStatus
+    makeRequest eConn updateStatus
+  where
+    updateStatus url = withResponse (statusRequest url) eConnManager $ \_ ->
+        return ()
+    statusRequest url = (parseUrlWithAppPath url eConn) {
+          method = methodPut
+        , queryString = encodeUtf8 "value=" `BS.append` LBS.toStrict (encode newStatus)
+        }
 
 -- | Provide a list of Eureka servers, with the ones in the same AZ as us first.
 -- Any of these Eureka servers are acceptable to maintain health in the face of
