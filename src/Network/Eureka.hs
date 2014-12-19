@@ -33,6 +33,7 @@ import Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
 import Network.HTTP.Types.Status (status404)
 import System.Log.Logger (debugM, errorM, infoM)
 import qualified Data.ByteString as BS
+import qualified Data.Aeson as Aeson (Value(String))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
 import qualified Data.Text as T
@@ -202,15 +203,19 @@ instance ToJSON InstanceInfo where
 data InstanceStatus = Up | Down | Starting | OutOfService | Unknown
                     deriving Show
 
+toNetworkName :: InstanceStatus -> String
+toNetworkName Up = "UP"
+toNetworkName Down = "DOWN"
+toNetworkName Starting = "STARTING"
+toNetworkName OutOfService = "OUT_OF_SERVICE"
+toNetworkName Unknown = "UNKNOWN"
+
+
 instance ToJSON InstanceStatus where
     -- N.B. OutOfService and Unknown aren't available according to the schema in
     -- https://github.com/Netflix/eureka/wiki/Eureka-REST-operations. What can
     -- we post in those cases?
-    toJSON Up = "UP"
-    toJSON Down = "DOWN"
-    toJSON Starting = "STARTING"
-    toJSON OutOfService = "OUT_OF_SERVICE"
-    toJSON Unknown = "UNKNOWN"
+    toJSON = Aeson.String . T.pack . toNetworkName
 
 defaultInstanceConfig :: InstanceConfig
 defaultInstanceConfig = InstanceConfig {
