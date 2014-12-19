@@ -1,7 +1,8 @@
 {-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        defaultEurekaConfig, defaultInstanceConfig,
-                       discoverDataCenterAmazon,
+                       discoverDataCenterAmazon, setStatus,
+                       InstanceStatus(..),
                        DataCenterInfo(DataCenterMyOwn),
                        EurekaConnection, AvailabilityZone, Region) where
 

@@ -3,8 +3,10 @@ import Network.Eureka (withEureka,
                  eurekaServerServiceUrls,
                  eurekaAvailabilityZones), defaultEurekaConfig,
     InstanceConfig(instanceAppName, instanceLeaseRenewalInterval),
+    InstanceStatus(OutOfService),
     discoverDataCenterAmazon,
-    defaultInstanceConfig)
+    defaultInstanceConfig,
+    setStatus)
 import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
@@ -27,8 +29,10 @@ main = do
     updateGlobalLogger "" (setLevel level . setHandlers handlers)
 
     dataCenterInfo <- withManager defaultManagerSettings discoverDataCenterAmazon
-    withEureka (myEurekaConfig commandLineServer) myInstanceConfig dataCenterInfo $ \_ ->
-        replicateM_ 20 $ threadDelay $ 1000 * 1000
+    withEureka (myEurekaConfig commandLineServer) myInstanceConfig dataCenterInfo $ \eConn -> do
+        replicateM_ 10 $ threadDelay $ 1000 * 1000
+        setStatus eConn OutOfService
+        replicateM_ 10 $ threadDelay $ 1000 * 1000
   where
     myEurekaConfig serverUrl = defaultEurekaConfig {
         eurekaInstanceInfoReplicationInterval = 1,
