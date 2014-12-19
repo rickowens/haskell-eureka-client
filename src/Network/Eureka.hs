@@ -32,7 +32,6 @@ import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
 import Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
 import Network.HTTP.Types.Status (status404)
 import System.Log.Logger (debugM, errorM, infoM)
-import qualified Data.ByteString as BS
 import qualified Data.Aeson as Aeson (Value(String))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
@@ -285,9 +284,9 @@ setStatus eConn@EurekaConnection { eConnManager, eConnStatus } newStatus = do
   where
     updateStatus url = withResponse (statusRequest url) eConnManager $ \_ ->
         return ()
-    statusRequest url = (parseUrlWithAppPath url eConn) {
+    statusRequest url = (parseUrlWithAdded url $ eConnAppPath eConn ++ "/status") {
           method = methodPut
-        , queryString = encodeUtf8 "value=" `BS.append` LBS.toStrict (encode newStatus)
+        , queryString = encodeUtf8 . T.pack $ "value=" ++ toNetworkName newStatus
         }
 
 -- | Provide a list of Eureka servers, with the ones in the same AZ as us first.
