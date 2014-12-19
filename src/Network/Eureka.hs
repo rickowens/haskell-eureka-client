@@ -12,7 +12,7 @@ import Data.Maybe (fromJust, fromMaybe)
 import Data.Text.Encoding (decodeUtf8)
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
-import Control.Concurrent.STM (TVar, atomically, newTVar, writeTVar)
+import Control.Concurrent.STM (TVar, atomically, newTVar, readTVar, writeTVar)
 import Control.Exception (bracket, throw, try, SomeException)
 import Control.Monad (foldM, when)
 import Control.Monad.Fix (mfix)
@@ -303,19 +303,33 @@ eurekaUrlsByProximity eConfig thisZone =
 registerInstance :: EurekaConnection -> IO ()
 registerInstance eConn@EurekaConnection { eConnManager,
         eConnInstanceConfig = InstanceConfig {instanceAppName}
-    } = makeRequest eConn sendRegister
+    } = do
+    instanceInfo <- readEConnInstanceInfo eConn
+    makeRequest eConn (sendRegister instanceInfo)
   where
-    sendRegister url = withResponse (registerRequest url) eConnManager $ \_ ->
-        return ()
-    registerRequest url = (parseUrlWithAdded url $ "apps/" ++ instanceAppName) {
+    sendRegister instanceInfo url =
+        withResponse (registerRequest url instanceInfo) eConnManager $ \_ ->
+            return ()
+    registerRequest url instanceInfo =
+        (parseUrlWithAdded url $ "apps/" ++ instanceAppName) {
           method = methodPost
         , requestHeaders = [("Content-Type", "application/json")]
         , requestBody = RequestBodyLBS $ encode $ object [
-            "instance" .= eConnInstanceInfo eConn
+            "instance" .= instanceInfo
             ]
         }
 
-eConnInstanceInfo :: EurekaConnection -> InstanceInfo
+
+-- | Read the instance's status and use it to produce an InstanceInfo.
+readEConnInstanceInfo :: EurekaConnection -> IO InstanceInfo
+readEConnInstanceInfo eConn@EurekaConnection {eConnStatus} =
+    eConnInstanceInfo eConn <$> atomically (readTVar eConnStatus)
+
+
+-- | Build an InstanceInfo describing this instance using information in a
+-- EurekaConnection and the given status.  Reading status is impure, but this
+-- function can do the bulk of the pure work.
+eConnInstanceInfo :: EurekaConnection -> InstanceStatus -> InstanceInfo
 eConnInstanceInfo eConn@EurekaConnection {
       eConnDataCenterInfo
     , eConnInstanceConfig = InstanceConfig {
@@ -324,13 +338,13 @@ eConnInstanceInfo eConn@EurekaConnection {
         , instanceSecurePort
         }
     , eConnHostname
-    } = InstanceInfo {
+    } status = InstanceInfo {
       instanceInfoHostName = eConnHostname
     , instanceInfoAppName = instanceAppName
     , instanceInfoIpAddr = eConnPublicIpv4 eConn
     , instanceInfoVipAddr = eConnVirtualHostname eConn
     , instanceInfoSecureVipAddr = eConnSecureVirtualHostname eConn
-    , instanceInfoStatus = Starting
+    , instanceInfoStatus = status
     , instanceInfoPort = instanceNonSecurePort
     , instanceInfoSecurePort = instanceSecurePort
     , instanceInfoDataCenterInfo = eConnDataCenterInfo
