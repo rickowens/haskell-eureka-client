@@ -6,17 +6,17 @@ module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        DataCenterInfo(DataCenterMyOwn),
                        EurekaConnection, AvailabilityZone, Region) where
 
-import Data.Aeson (encode, object, (.=))
-import Data.Default (def)  -- re-export for convenience
-import Data.List (elemIndex, find, nub)
-import Data.Maybe (fromJust, fromMaybe)
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
 import Control.Concurrent.STM (TVar, atomically, newTVar, readTVar, writeTVar)
 import Control.Exception (bracket, throw, try, SomeException)
 import Control.Monad (foldM, when)
 import Control.Monad.Fix (mfix)
+import Data.Aeson (encode, object, (.=))
+import Data.Default (def)  -- re-export for convenience
+import Data.List (elemIndex, find, nub)
+import Data.Maybe (fromJust, fromMaybe)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Network.BSD (getHostName)
 import Network.Eureka.Types (InstanceInfo(..), EurekaConfig(..),
                              InstanceConfig(..), InstanceStatus(..),
@@ -103,6 +103,10 @@ withEureka eConfig iConfig iInfo m =
     registerAndRun eConn = do
         registerInstance eConn
         m eConn
+
+lookupByAppName :: EurekaConnection -> String -> IO [InstanceInfo]
+lookupByAppName _ _ =
+    return []
 
 setStatus :: EurekaConnection -> InstanceStatus -> IO ()
 setStatus eConn@EurekaConnection { eConnManager, eConnStatus } newStatus = do
