@@ -6,7 +6,7 @@ module Network.Eureka.Types (
     ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Control.Monad (mzero)
+import Control.Monad (mzero, (>=>))
 import Data.Aeson (object, FromJSON(parseJSON), ToJSON(toJSON), Value(Object),
                    withObject, withText,
                    (.=), (.:), (.:?), (.!=))
@@ -199,7 +199,7 @@ instance FromJSON InstanceInfo where
             <*> v .: "metadata"
       where
         parsePort :: Value -> Parser Int
-        parsePort portObj = withObject "port" (.: "$") portObj >>= withText "portNumber" parseAsInt
+        parsePort = withObject "port" (.: "$") >=> withText "portNumber" parseAsInt
         parseAsInt :: T.Text -> Parser Int
         parseAsInt t =
             maybe (fail $ "couldn't understand port number: " ++ s) return $ readMaybe s
