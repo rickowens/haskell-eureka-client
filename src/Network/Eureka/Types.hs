@@ -157,6 +157,7 @@ data InstanceInfo = InstanceInfo {
     , instanceInfoSecurePort :: Int
     , instanceInfoDataCenterInfo :: DataCenterInfo
     , instanceInfoMetadata :: Map String String
+    , instanceInfoIsCoordinatingDiscoveryServer :: Bool
     } deriving Show
 
 instance ToJSON InstanceInfo where
@@ -171,6 +172,7 @@ instance ToJSON InstanceInfo where
         , instanceInfoSecurePort
         , instanceInfoDataCenterInfo
         , instanceInfoMetadata
+        , instanceInfoIsCoordinatingDiscoveryServer
         } = object [
         "hostName" .= instanceInfoHostName,
         "app" .= instanceInfoAppName,
@@ -181,7 +183,8 @@ instance ToJSON InstanceInfo where
         "port" .= instanceInfoPort,
         "securePort" .= instanceInfoSecurePort,
         "dataCenterInfo" .= instanceInfoDataCenterInfo,
-        "metadata" .= instanceInfoMetadata
+        "metadata" .= instanceInfoMetadata,
+        "isCoordinatingDiscoveryServer" .= instanceInfoIsCoordinatingDiscoveryServer
         ]
 
 instance FromJSON InstanceInfo where
@@ -197,6 +200,7 @@ instance FromJSON InstanceInfo where
             <*> (v .: "port" >>= parsePort)
             <*> v .: "dataCenterInfo"
             <*> v .: "metadata"
+            <*> v .:? "isCoordinatingDiscoveryServer" .!= False
       where
         parsePort :: Value -> Parser Int
         parsePort = withObject "port" (.: "$") >=> withText "portNumber" parseAsInt

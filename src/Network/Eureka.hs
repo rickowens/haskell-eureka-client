@@ -225,6 +225,7 @@ eConnInstanceInfo eConn@EurekaConnection {
     , instanceInfoSecurePort = instanceSecurePort
     , instanceInfoDataCenterInfo = eConnDataCenterInfo
     , instanceInfoMetadata = instanceMetadata
+    , instanceInfoIsCoordinatingDiscoveryServer = False
     }
 
 -- | Get the virtual hostname from the Eureka connection, taking the real
