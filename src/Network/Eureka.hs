@@ -174,6 +174,7 @@ data InstanceInfo = InstanceInfo {
     , instanceInfoPort :: Int
     , instanceInfoSecurePort :: Int
     , instanceInfoDataCenterInfo :: DataCenterInfo
+    , instanceInfoMetadata :: Map String String
     } deriving Show
 
 instance ToJSON InstanceInfo where
@@ -187,6 +188,7 @@ instance ToJSON InstanceInfo where
         , instanceInfoPort
         , instanceInfoSecurePort
         , instanceInfoDataCenterInfo
+        , instanceInfoMetadata
         } = object [
         "hostName" .= instanceInfoHostName,
         "app" .= instanceInfoAppName,
@@ -196,7 +198,8 @@ instance ToJSON InstanceInfo where
         "status" .= instanceInfoStatus,
         "port" .= instanceInfoPort,
         "securePort" .= instanceInfoSecurePort,
-        "dataCenterInfo" .= instanceInfoDataCenterInfo
+        "dataCenterInfo" .= instanceInfoDataCenterInfo,
+        "metadata" .= instanceInfoMetadata
         ]
 
 data InstanceStatus = Up | Down | Starting | OutOfService | Unknown
@@ -350,6 +353,7 @@ eConnInstanceInfo eConn@EurekaConnection {
           instanceAppName
         , instanceNonSecurePort
         , instanceSecurePort
+        , instanceMetadata
         }
     , eConnHostname
     } status = InstanceInfo {
@@ -362,6 +366,7 @@ eConnInstanceInfo eConn@EurekaConnection {
     , instanceInfoPort = instanceNonSecurePort
     , instanceInfoSecurePort = instanceSecurePort
     , instanceInfoDataCenterInfo = eConnDataCenterInfo
+    , instanceInfoMetadata = instanceMetadata
     }
 
 -- | Get the virtual hostname from the Eureka connection, taking the real

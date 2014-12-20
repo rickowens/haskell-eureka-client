@@ -2,7 +2,8 @@ import Network.Eureka (withEureka,
     EurekaConfig(eurekaInstanceInfoReplicationInterval, eurekaRegion,
                  eurekaServerServiceUrls,
                  eurekaAvailabilityZones), defaultEurekaConfig,
-    InstanceConfig(instanceAppName, instanceLeaseRenewalInterval),
+    InstanceConfig(instanceAppName, instanceLeaseRenewalInterval,
+                   instanceMetadata),
     InstanceStatus(OutOfService),
     discoverDataCenterAmazon,
     defaultInstanceConfig,
@@ -42,7 +43,8 @@ main = do
         }
     myInstanceConfig = defaultInstanceConfig {
         instanceLeaseRenewalInterval = 1,
-        instanceAppName = "haskell_eureka_test_app"
+        instanceAppName = "haskell_eureka_test_app",
+        instanceMetadata = Map.fromList [("testKey", "testValue")]
         }
     tweak h = setFormatter h (simpleLogFormatter logFormat)
     logFormat = "$prio [$tid] [$time] $loggername - $msg"
