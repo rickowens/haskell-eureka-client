@@ -6,7 +6,8 @@ module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        DataCenterInfo(DataCenterMyOwn),
                        EurekaConnection, AvailabilityZone, Region) where
 
-import Data.Aeson (object, encode, ToJSON(toJSON), (.=))
+import Data.Aeson (object, encode, FromJSON(parseJSON), ToJSON(toJSON), Value(Object),
+                   (.=), (.:))
 import Data.List (elemIndex, find, nub)
 import Data.Map (Map)
 import Data.Maybe (fromJust, fromMaybe)
@@ -15,7 +16,7 @@ import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
 import Control.Concurrent.STM (TVar, atomically, newTVar, readTVar, writeTVar)
 import Control.Exception (bracket, throw, try, SomeException)
-import Control.Monad (foldM, when)
+import Control.Monad (foldM, when, mzero)
 import Control.Monad.Fix (mfix)
 import Network.BSD (getHostName)
 import Network.Socket (AddrInfo(addrAddress, addrFamily),
@@ -140,6 +141,25 @@ instance ToJSON DataCenterInfo where
             ]
         ]
 
+instance FromJSON DataCenterInfo where
+    parseJSON (Object v) = do
+        name <- v .: "name"
+        case name of
+            "MyOwn" -> return DataCenterMyOwn
+            "Amazon" -> do
+                metadata <- v .: "metadata"
+                DataCenterAmazon
+                    <$> metadata .: "ami-id"
+                    <*> metadata .: "ami-launch-index"
+                    <*> metadata .: "instance-type"
+                    <*> metadata .: "instance-id"
+                    <*> metadata .: "local-ipv4"
+                    <*> metadata .: "availability-zone"
+                    <*> metadata .: "public-hostname"
+                    <*> metadata .: "public-ipv4"
+            other -> fail $ "unknown datacenter info: " ++ other
+    parseJSON _ = mzero
+
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
 -- fill in an DataCenterAmazon.
 discoverDataCenterAmazon :: Manager -> IO DataCenterInfo
@@ -202,6 +222,21 @@ instance ToJSON InstanceInfo where
         "metadata" .= instanceInfoMetadata
         ]
 
+instance FromJSON InstanceInfo where
+    parseJSON (Object v) =
+        InstanceInfo
+            <$> v .: "hostname"
+            <*> v .: "app"
+            <*> v .: "ipAddr"
+            <*> v .: "vipAddr"
+            <*> v .: "secureVipAddr"
+            <*> v .: "status"
+            <*> v .: "port"
+            <*> v .: "securePort"
+            <*> v .: "dataCenterInfo"
+            <*> v .: "metadata"
+    parseJSON _ = mzero
+
 data InstanceStatus = Up | Down | Starting | OutOfService | Unknown
                     deriving Show
 
@@ -212,12 +247,23 @@ toNetworkName Starting = "STARTING"
 toNetworkName OutOfService = "OUT_OF_SERVICE"
 toNetworkName Unknown = "UNKNOWN"
 
+fromNetworkName :: (Monad m) => String -> m InstanceStatus
+fromNetworkName "UP" = return Up
+fromNetworkName "DOWN" = return Down
+fromNetworkName "STARTING" = return Starting
+fromNetworkName "OUT_OF_SERVICE" = return OutOfService
+fromNetworkName "UNKNOWN" = return Unknown
+fromNetworkName s = fail $ "unknown InstanceStatus: " ++ s
 
 instance ToJSON InstanceStatus where
     -- N.B. OutOfService and Unknown aren't available according to the schema in
     -- https://github.com/Netflix/eureka/wiki/Eureka-REST-operations. What can
     -- we post in those cases?
     toJSON = Aeson.String . T.pack . toNetworkName
+
+instance FromJSON InstanceStatus where
+    parseJSON (Aeson.String text) = fromNetworkName (T.unpack text)
+    parseJSON _ = mzero
 
 defaultInstanceConfig :: InstanceConfig
 defaultInstanceConfig = InstanceConfig {
