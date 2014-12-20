@@ -197,9 +197,11 @@ registerInstance eConn@EurekaConnection { eConnManager,
 
 -- | Read the instance's status and use it to produce an InstanceInfo.
 readEConnInstanceInfo :: EurekaConnection -> IO InstanceInfo
-readEConnInstanceInfo eConn@EurekaConnection {eConnStatus} =
-    eConnInstanceInfo eConn <$> atomically (readTVar eConnStatus)
+readEConnInstanceInfo eConn = eConnInstanceInfo eConn <$> readStatus eConn
 
+-- | A helper function to read the instance's status.
+readStatus :: EurekaConnection -> IO InstanceStatus
+readStatus EurekaConnection { eConnStatus } = atomically (readTVar eConnStatus)
 
 -- | Build an InstanceInfo describing this instance using information in a
 -- EurekaConnection and the given status.  Reading status is impure, but this
