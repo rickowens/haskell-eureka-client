@@ -2,6 +2,7 @@
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
                        def,
                        discoverDataCenterAmazon, setStatus,
+                       lookupByAppName,
                        InstanceStatus(..),
                        DataCenterInfo(DataCenterMyOwn),
                        EurekaConnection, AvailabilityZone, Region) where
@@ -10,9 +11,12 @@ import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
 import Control.Concurrent.STM (TVar, atomically, newTVar, readTVar, writeTVar)
 import Control.Exception (bracket, throw, try, SomeException)
-import Control.Monad (foldM, when)
+import Control.Monad (foldM, mzero, when)
 import Control.Monad.Fix (mfix)
-import Data.Aeson (encode, object, (.=))
+import Data.Aeson (eitherDecode, encode, object, (.=), (.:),
+                   FromJSON(parseJSON),
+                   Value(Object, Array))
+import Data.Aeson.Types (parseEither)
 import Data.Default (def)  -- re-export for convenience
 import Data.List (elemIndex, find, nub)
 import Data.Maybe (fromJust, fromMaybe)
@@ -39,6 +43,7 @@ import System.Log.Logger (debugM, errorM, infoM)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
 import qualified Data.Text as T
+import qualified Data.Vector as V
 
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
 -- fill in an DataCenterAmazon.
@@ -105,8 +110,33 @@ withEureka eConfig iConfig iInfo m =
         m eConn
 
 lookupByAppName :: EurekaConnection -> String -> IO [InstanceInfo]
-lookupByAppName _ _ =
-    return []
+lookupByAppName eConn@EurekaConnection { eConnManager } appName = do
+    result <- makeRequest eConn getByAppName
+    either error (return . applicationInstanceInfos) result
+  where
+    getByAppName url = do
+        response <- eitherDecode . responseBody <$> httpLbs (request url) eConnManager
+        return $ parseEither (.: "application") =<< response
+    request url = requestJSON $ parseUrlWithAdded url $ "apps/" ++ appName
+
+-- | Response type from Eureka "apps/APP_NAME" API.
+data Application = Application {
+    _applicationName :: String,
+    applicationInstanceInfos :: [InstanceInfo]
+    } deriving Show
+
+instance FromJSON Application where
+    parseJSON (Object v) = do
+        name <- v .: "name"
+        instanceOneOrMany <- v .: "instance"
+        instanceData <- case instanceOneOrMany of
+            (Array ary) -> mapM parseJSON (V.toList ary)
+            o@(Object _) -> do
+                instanceInfo <- parseJSON o
+                return [instanceInfo]
+            other -> fail $ "instance data was of a strange format: " ++ show other
+        return $ Application name instanceData
+    parseJSON _ = mzero
 
 setStatus :: EurekaConnection -> InstanceStatus -> IO ()
 setStatus eConn@EurekaConnection { eConnManager, eConnStatus } newStatus = do
@@ -407,6 +437,11 @@ parseUrlWithAdded url = fromJust . parseUrl . addPath url
 
 parseUrlWithAppPath :: String -> EurekaConnection -> Request
 parseUrlWithAppPath url = parseUrlWithAdded url . eConnAppPath
+
+requestJSON :: Request -> Request
+requestJSON r = r {
+    requestHeaders = ("Accept", encodeUtf8 "application/json") : requestHeaders r
+    }
 
 -- | Perform an action every 'delay' seconds.
 -- Delays are not exact; we use threadDelay to schedule the repetition.

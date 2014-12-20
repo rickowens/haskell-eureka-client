@@ -7,6 +7,7 @@ import Network.Eureka (withEureka,
     InstanceStatus(OutOfService),
     def,
     discoverDataCenterAmazon,
+    lookupByAppName,
     setStatus)
 import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)
@@ -31,6 +32,8 @@ main = do
 
     dataCenterInfo <- withManager defaultManagerSettings discoverDataCenterAmazon
     withEureka (myEurekaConfig commandLineServer) myInstanceConfig dataCenterInfo $ \eConn -> do
+        result <- lookupByAppName eConn "FITBIT-SYNC-WORKER"
+        print result
         replicateM_ 10 $ threadDelay $ 1000 * 1000
         setStatus eConn OutOfService
         replicateM_ 10 $ threadDelay $ 1000 * 1000

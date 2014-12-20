@@ -8,10 +8,13 @@ module Network.Eureka.Types (
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (mzero)
 import Data.Aeson (object, FromJSON(parseJSON), ToJSON(toJSON), Value(Object),
-                   (.=), (.:))
+                   withObject, withText,
+                   (.=), (.:), (.:?), (.!=))
+import Data.Aeson.Types (Parser)
 import Data.Default (Default(def))
 import Data.Map (Map)
 import Network.Socket (HostName)
+import Text.Read (readMaybe)
 import qualified Data.Aeson as Aeson (Value(String))
 import qualified Data.Map as Map
 import qualified Data.Text as T
@@ -128,7 +131,8 @@ instance FromJSON DataCenterInfo where
                 metadata <- v .: "metadata"
                 DataCenterAmazon
                     <$> metadata .: "ami-id"
-                    <*> metadata .: "ami-launch-index"
+                    -- FIXME: should use Maybe?
+                    <*> metadata .:? "ami-launch-index" .!= ""
                     <*> metadata .: "instance-type"
                     <*> metadata .: "instance-id"
                     <*> metadata .: "local-ipv4"
@@ -183,16 +187,24 @@ instance ToJSON InstanceInfo where
 instance FromJSON InstanceInfo where
     parseJSON (Object v) =
         InstanceInfo
-            <$> v .: "hostname"
+            <$> v .: "hostName"
             <*> v .: "app"
             <*> v .: "ipAddr"
-            <*> v .: "vipAddr"
-            <*> v .: "secureVipAddr"
+            <*> v .:? "vipAddr" .!= ""   -- FIXME: should vipAddr be Maybe?
+            <*> v .:? "secureVipAddr" .!= ""
             <*> v .: "status"
-            <*> v .: "port"
-            <*> v .: "securePort"
+            <*> (v .: "port" >>= parsePort)
+            <*> (v .: "port" >>= parsePort)
             <*> v .: "dataCenterInfo"
             <*> v .: "metadata"
+      where
+        parsePort :: Value -> Parser Int
+        parsePort portObj = withObject "port" (.: "$") portObj >>= withText "portNumber" parseAsInt
+        parseAsInt :: T.Text -> Parser Int
+        parseAsInt t =
+            maybe (fail $ "couldn't understand port number: " ++ s) return $ readMaybe s
+          where
+            s = T.unpack t
     parseJSON _ = mzero
 
 instance Default InstanceConfig where
