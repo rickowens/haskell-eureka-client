@@ -1,12 +1,12 @@
 import Network.Eureka (withEureka,
     EurekaConfig(eurekaInstanceInfoReplicationInterval, eurekaRegion,
                  eurekaServerServiceUrls,
-                 eurekaAvailabilityZones), defaultEurekaConfig,
+                 eurekaAvailabilityZones),
     InstanceConfig(instanceAppName, instanceLeaseRenewalInterval,
                    instanceMetadata),
     InstanceStatus(OutOfService),
+    def,
     discoverDataCenterAmazon,
-    defaultInstanceConfig,
     setStatus)
 import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)
@@ -35,13 +35,13 @@ main = do
         setStatus eConn OutOfService
         replicateM_ 10 $ threadDelay $ 1000 * 1000
   where
-    myEurekaConfig serverUrl = defaultEurekaConfig {
+    myEurekaConfig serverUrl = def {
         eurekaInstanceInfoReplicationInterval = 1,
         eurekaServerServiceUrls = Map.fromList [("us-east-1a", [serverUrl])],
         eurekaAvailabilityZones = Map.fromList [("us-east-1", ["us-east-1a"])],
         eurekaRegion = "us-east-1"
         }
-    myInstanceConfig = defaultInstanceConfig {
+    myInstanceConfig = def {
         instanceLeaseRenewalInterval = 1,
         instanceAppName = "haskell_eureka_test_app",
         instanceMetadata = Map.fromList [("testKey", "testValue")]

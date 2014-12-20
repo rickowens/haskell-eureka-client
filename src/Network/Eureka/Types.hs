@@ -2,13 +2,14 @@
 module Network.Eureka.Types (
     EurekaConfig(..), InstanceConfig(..), InstanceInfo(..), InstanceStatus(..),
     AvailabilityZone, Region, DataCenterInfo(..),
-    defaultEurekaConfig, defaultInstanceConfig, toNetworkName,
+    toNetworkName,
     ) where
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (mzero)
 import Data.Aeson (object, FromJSON(parseJSON), ToJSON(toJSON), Value(Object),
                    (.=), (.:))
+import Data.Default (Default(def))
 import Data.Map (Map)
 import Network.Socket (HostName)
 import qualified Data.Aeson as Aeson (Value(String))
@@ -31,8 +32,8 @@ data EurekaConfig = EurekaConfig {
       -- ^ The region we are running in.
     } deriving Show
 
-defaultEurekaConfig :: EurekaConfig
-defaultEurekaConfig = EurekaConfig {
+instance Default EurekaConfig where
+    def = EurekaConfig {
       eurekaServerServiceUrls = Map.empty
     , eurekaInstanceInfoReplicationInterval = 30
     , eurekaAvailabilityZones = Map.empty
@@ -194,8 +195,8 @@ instance FromJSON InstanceInfo where
             <*> v .: "metadata"
     parseJSON _ = mzero
 
-defaultInstanceConfig :: InstanceConfig
-defaultInstanceConfig = InstanceConfig {
+instance Default InstanceConfig where
+    def = InstanceConfig {
       instanceServiceUrlDefault = ""
     , instanceLeaseRenewalInterval = 30
     , instanceAppName = ""

@@ -1,12 +1,13 @@
 {-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
 module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
-                       defaultEurekaConfig, defaultInstanceConfig,
+                       def,
                        discoverDataCenterAmazon, setStatus,
                        InstanceStatus(..),
                        DataCenterInfo(DataCenterMyOwn),
                        EurekaConnection, AvailabilityZone, Region) where
 
 import Data.Aeson (encode, object, (.=))
+import Data.Default (def)  -- re-export for convenience
 import Data.List (elemIndex, find, nub)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -20,7 +21,6 @@ import Network.BSD (getHostName)
 import Network.Eureka.Types (InstanceInfo(..), EurekaConfig(..),
                              InstanceConfig(..), InstanceStatus(..),
                              AvailabilityZone, Region, DataCenterInfo(..),
-                             defaultInstanceConfig, defaultEurekaConfig,
                              toNetworkName)
 import Network.Socket (AddrInfo(addrAddress, addrFamily),
                        Family(AF_INET), HostName, NameInfoFlag(NI_NUMERICHOST),
