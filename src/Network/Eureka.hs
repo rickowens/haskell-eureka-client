@@ -17,9 +17,10 @@ import Data.Aeson (eitherDecode, encode, object, (.=), (.:),
                    FromJSON(parseJSON),
                    Value(Object, Array))
 import Data.Aeson.Types (parseEither)
-import Data.Default (def)  -- re-export for convenience
+import Data.Default (Default,
+                     def)  -- re-export for convenience
 import Data.List (elemIndex, find, nub)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust, fromMaybe, isNothing)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Network.BSD (getHostName)
 import Network.Eureka.Types (InstanceInfo(..), EurekaConfig(..),
@@ -312,11 +313,13 @@ unregister eConn@EurekaConnection { eConnManager } = do
           }
 
 
-postHeartbeat :: EurekaConnection -> IO ()
+type HeartbeatState = ()
+
+postHeartbeat :: EurekaConnection -> HeartbeatState -> IO HeartbeatState
 postHeartbeat eConn@EurekaConnection {
     eConnInstanceConfig = InstanceConfig { instanceAppName },
     eConnManager
-    } = do
+    } () = do
     -- N.B. This is more-or-less what's described by the Control.Exception
     -- documentation under "Catching all exceptions". We use try instead of
     -- catch because we aren't interested in asynchronous exceptions, so
@@ -344,9 +347,76 @@ postHeartbeat eConn@EurekaConnection {
           checkStatus = \_ _ _ -> Nothing   -- so we can reregister if we get a 404
           }
 
-updateInstanceInfo :: EurekaConnection -> IO ()
-updateInstanceInfo conn =
-    debugM "Eureka.updateInstanceInfo" $ "Updating instance info " ++ show conn
+-- | "IIR" stands for "instance info replicator", which is this thread's name
+data IIRState = IIRState {
+      iirLastAMIId :: Maybe String
+      -- ^ The AMI ID of the coordinating server the last time we saw it.
+      -- 'Nothing' on our first run.
+    } deriving Show
+
+instance Default IIRState where
+    def = IIRState {
+        iirLastAMIId = Nothing
+        }
+
+updateInstanceInfo :: EurekaConnection -> IIRState -> IO IIRState
+updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
+    eurekaServer <- getCoordinatingServer
+    maybe (return oldState) updateDiscoveryServer eurekaServer
+  where
+    getCoordinatingServer :: IO (Maybe InstanceInfo)
+    getCoordinatingServer = do
+        -- N.B. The Java client does an in-memory lookup in a prepopulated hash
+        -- rather than issuing the query itself. Failure there means getting a
+        -- 'null' response. Here we can hit a 404 and die. Let's just replicate
+        -- the silent failure of the Java version.
+        eInstances <- try (lookupByAppName eConn discoveryAppId)
+                      :: IO (Either HttpException [InstanceInfo])
+        return $ case eInstances of
+            Left _ -> Nothing
+            Right instances -> find coordinator instances
+
+    coordinator = instanceInfoIsCoordinatingDiscoveryServer
+    updateDiscoveryServer :: InstanceInfo -> IO IIRState
+    updateDiscoveryServer eurekaServer = do
+        let mnewAMI = maybeGetAMIId eurekaServer
+        maybe
+            (return oldState { iirLastAMIId = mnewAMI })
+            (checkDiscoveryServerChanged mnewAMI) iirLastAMIId
+
+    checkDiscoveryServerChanged :: Maybe String -> String -> IO IIRState
+    checkDiscoveryServerChanged mnewAMI lastAMI =
+        if isNothing mnewAMI || mnewAMI == Just lastAMI
+            then return oldState
+            else do
+            infoM "Eureka.updateInstanceInfo" $ "The eureka AMI ID changed from "
+                ++ lastAMI ++ " to " ++ fromJust mnewAMI
+                ++ ". Pushing the appinfo to eureka"
+
+            status <- readStatus eConn
+            -- N.B. The original client does this whenever the instance info is
+            -- "dirty" -- its status or its metadata were updated. Additionally,
+            -- its status can change as a result of a health check (in this
+            -- thread).
+            --
+            -- We push status changes to Eureka immediately, so we don't do that
+            -- here. We don't support mutable metadata yet either. Finally, we
+            -- don't support health checks. In other words, this log message is
+            -- a little redundant.
+            infoM "Eureka.updateInstanceInfo" $ eConnAppPath eConn
+                ++ " - retransmit instance info with status "
+                ++ show status
+            registerInstance eConn
+            return oldState { iirLastAMIId = mnewAMI }
+
+    maybeGetAMIId :: InstanceInfo -> Maybe String
+    maybeGetAMIId InstanceInfo { instanceInfoDataCenterInfo = DataCenterAmazon {
+        amazonAmiId
+        }} = Just amazonAmiId
+    maybeGetAMIId _ = Nothing
+    -- FIXME: this is copied straight out of the Eureka source code, but there's
+    -- no server on my network called DISCOVERY, so I don't know how it works.
+    discoveryAppId = "DISCOVERY"
 
 connectEureka :: Manager
               -> EurekaConfig -> InstanceConfig -> DataCenterInfo
@@ -359,8 +429,8 @@ connectEureka manager
         instanceLeaseRenewalInterval=heartbeatInterval
         , instanceEnabledOnInit
         } dataCenterInfo = mfix $ \econn -> do
-    heartbeatThreadId <- forkIO . heartbeatThread $ econn
-    instanceInfoThreadId <- forkIO . instanceInfoThread $ econn
+    heartbeatThreadId <- forkIO $ heartbeatThread econn ()
+    instanceInfoThreadId <- forkIO $ instanceInfoThread econn def
     statusVar <- atomically $ newTVar (if instanceEnabledOnInit then Up else Starting)
 
     hostname <- getHostName
@@ -379,7 +449,7 @@ connectEureka manager
         , eConnStatus = statusVar
         }
   where
-    heartbeatThread :: EurekaConnection -> IO ()
+    heartbeatThread :: EurekaConnection -> () -> IO ()
     heartbeatThread = repeating heartbeatInterval . postHeartbeat
     instanceInfoThread = repeating instanceInfoInterval . updateInstanceInfo
     myHints = defaultHints { addrFamily = AF_INET }
@@ -447,14 +517,15 @@ requestJSON r = r {
     }
 
 -- | Perform an action every 'delay' seconds.
+-- This action keeps track of its internal state using 'a'.
 -- Delays are not exact; we use threadDelay to schedule the repetition.
-repeating :: Int -> IO () -> IO ()
-repeating i a = loop
+repeating :: Int -> (a -> IO a) -> a -> IO ()
+repeating i f = loop
   where
-    loop = do
-        a
+    loop a0 = do
+        result <- f a0
         threadDelay (i * 1000 * 1000)
-        loop
+        loop result
 
 -- | Generate a list of rotations of a list.
 -- > rotations [1..4]
