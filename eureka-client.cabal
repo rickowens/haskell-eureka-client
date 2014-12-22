@@ -16,8 +16,11 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules: Network.Eureka
-  -- other-modules:
+  exposed-modules:
+    Network.Eureka
+  other-modules:
+    Network.Eureka.Types
+
   -- other-extensions:
   build-depends:
     aeson,
