@@ -1,7 +1,6 @@
 import Network.Eureka (withEureka,
     EurekaConfig(eurekaInstanceInfoReplicationInterval, eurekaRegion,
-                 eurekaServerServiceUrls,
-                 eurekaAvailabilityZones),
+                 eurekaServerServiceUrls),
     InstanceConfig(instanceAppName, instanceLeaseRenewalInterval,
                    instanceMetadata),
     InstanceStatus(OutOfService),
@@ -40,9 +39,8 @@ main = do
   where
     myEurekaConfig serverUrl = def {
         eurekaInstanceInfoReplicationInterval = 1,
-        eurekaServerServiceUrls = Map.fromList [("us-east-1a", [serverUrl])],
-        eurekaAvailabilityZones = Map.fromList [("us-east-1", ["us-east-1a"])],
-        eurekaRegion = "us-east-1"
+        eurekaServerServiceUrls = Map.fromList [("default", [serverUrl])],
+        eurekaRegion = "default"
         }
     myInstanceConfig = def {
         instanceLeaseRenewalInterval = 1,
