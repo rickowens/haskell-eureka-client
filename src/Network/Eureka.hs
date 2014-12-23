@@ -337,7 +337,7 @@ postHeartbeat eConn@EurekaConnection {
             appPath ++ " - Heartbeat status: " ++ show responseStatus
         when (responseStatus == status404) $ do
             infoM "Eureka.postHeartbeat" $
-                appPath ++ " - Re-registering /apps" ++ instanceAppName
+                appPath ++ " - Re-registering apps/" ++ instanceAppName
             registerInstance eConn
     appPath = eConnAppPath eConn
     sendHeartbeat url = withResponse (heartbeatRequest url) eConnManager $
