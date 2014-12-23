@@ -171,7 +171,10 @@ eurekaUrlsByProximity eConfig thisZone =
     -- dogpile servers in the first availability zone in case of failure.
     thisZoneFirst :: [AvailabilityZone] -> [AvailabilityZone]
     thisZoneFirst zones = case elemIndex thisZone zones of
-        Nothing -> error $ "couldn't find " ++ thisZone ++ " in zones " ++ show zones
+        -- If our current zone isn't present, try falling back to "default".
+        Nothing -> case elemIndex "default" zones of
+            Nothing -> error $ "couldn't find " ++ thisZone ++ " in zones " ++ show zones
+            _ -> ["default"]
         -- fromJust is safe here because if the element is in the list, some
         -- rotation will put the element at the front.
         _ -> fromJust . find ((== thisZone) . head) . rotations $ zones
@@ -472,8 +475,9 @@ makeRequest conn@EurekaConnection {eConnEurekaConfig}
 availabilityZonesFromConfig :: EurekaConfig -> [AvailabilityZone]
 availabilityZonesFromConfig EurekaConfig{eurekaAvailabilityZones, eurekaRegion} =
     fromMaybe
-        (error $ "couldn't find region " ++ show eurekaRegion ++
-          " in zones config " ++ show eurekaAvailabilityZones)
+        -- If we don't have any listed for this region, there's always the
+        -- "default" availability zone.
+        ["default"]
         (Map.lookup eurekaRegion eurekaAvailabilityZones)
 
 eurekaServerServiceUrlsForZone :: EurekaConfig -> AvailabilityZone -> [String]
