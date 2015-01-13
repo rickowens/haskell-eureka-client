@@ -1,11 +1,17 @@
 {-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
-module Network.Eureka (withEureka, EurekaConfig(..), InstanceConfig(..),
-                       def,
-                       discoverDataCenterAmazon, setStatus,
-                       lookupByAppName,
-                       InstanceStatus(..),
-                       DataCenterInfo(DataCenterMyOwn),
-                       EurekaConnection, AvailabilityZone, Region) where
+module Network.Eureka (withEureka,
+  EurekaConfig(..),
+  InstanceConfig(..),
+  def,
+  discoverDataCenterAmazon,
+  setStatus,
+  lookupByAppName,
+  InstanceStatus(..),
+  DataCenterInfo(DataCenterMyOwn),
+  EurekaConnection,
+  AvailabilityZone,
+  Region
+) where
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
