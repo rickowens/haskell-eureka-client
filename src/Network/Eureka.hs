@@ -52,7 +52,7 @@ discoverDataCenterAmazon :: Manager -> IO DataCenterInfo
 discoverDataCenterAmazon manager =
     DataCenterAmazon <$>
         getMeta "ami-id" <*>
-        getMeta "ami-launch-index" <*>
+        (read <$> getMeta "ami-launch-index") <*>
         getMeta "instance-id" <*>
         getMeta "instance-type" <*>
         getMeta "local-ipv4" <*>

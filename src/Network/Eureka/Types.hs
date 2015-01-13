@@ -86,7 +86,7 @@ type AmazonInstanceType = String
 data DataCenterInfo = DataCenterMyOwn
                     | DataCenterAmazon {
       amazonAmiId :: String
-    , amazonAmiLaunchIndex :: String
+    , amazonAmiLaunchIndex :: Integer
     , amazonInstanceId :: String
     , amazonInstanceType :: AmazonInstanceType
     , amazonLocalIpv4 :: String
@@ -132,7 +132,7 @@ instance FromJSON DataCenterInfo where
                 DataCenterAmazon
                     <$> metadata .: "ami-id"
                     -- FIXME: should use Maybe?
-                    <*> metadata .:? "ami-launch-index" .!= ""
+                    <*> metadata .:? "ami-launch-index" .!= 0
                     <*> metadata .: "instance-type"
                     <*> metadata .: "instance-id"
                     <*> metadata .: "local-ipv4"
