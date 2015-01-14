@@ -8,7 +8,8 @@ module Network.Eureka (withEureka,
   lookupByAppName,
   InstanceInfo(..),
   InstanceStatus(..),
-  DataCenterInfo(DataCenterMyOwn),
+  DataCenterInfo(..),
+  AmazonDataCenterInfo(..),
   EurekaConnection,
   AvailabilityZone,
   Region
@@ -33,6 +34,7 @@ import Network.BSD (getHostName)
 import Network.Eureka.Types (InstanceInfo(..), EurekaConfig(..),
                              InstanceConfig(..), InstanceStatus(..),
                              AvailabilityZone, Region, DataCenterInfo(..),
+                             AmazonDataCenterInfo(..),
                              toNetworkName)
 import Network.Socket (AddrInfo(addrAddress, addrFamily),
                        Family(AF_INET), HostName, NameInfoFlag(NI_NUMERICHOST),
@@ -55,9 +57,9 @@ import qualified Data.Vector as V
 
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
 -- fill in an DataCenterAmazon.
-discoverDataCenterAmazon :: Manager -> IO DataCenterInfo
+discoverDataCenterAmazon :: Manager -> IO AmazonDataCenterInfo
 discoverDataCenterAmazon manager =
-    DataCenterAmazon <$>
+    AmazonDataCenterInfo <$>
         getMeta "ami-id" <*>
         (read <$> getMeta "ami-launch-index") <*>
         getMeta "instance-id" <*>
@@ -264,14 +266,14 @@ eConnSecureVirtualHostname eConn@EurekaConnection {
 -- | Return the best hostname available.
 eConnPublicHostname :: EurekaConnection -> String
 eConnPublicHostname EurekaConnection {
-    eConnDataCenterInfo = DataCenterAmazon {
+    eConnDataCenterInfo = DataCenterAmazon AmazonDataCenterInfo {
             amazonPublicHostname } } = amazonPublicHostname
 eConnPublicHostname EurekaConnection { eConnHostname } = eConnHostname
 
 -- | Return the best IP address available.
 eConnPublicIpv4 :: EurekaConnection -> String
 eConnPublicIpv4 EurekaConnection {
-    eConnDataCenterInfo = DataCenterAmazon {
+    eConnDataCenterInfo = DataCenterAmazon AmazonDataCenterInfo {
             amazonPublicIpv4 } } = amazonPublicIpv4
 eConnPublicIpv4 EurekaConnection { eConnHostIpv4 } = eConnHostIpv4
 
@@ -420,9 +422,10 @@ updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
             return oldState { iirLastAMIId = mnewAMI }
 
     maybeGetAMIId :: InstanceInfo -> Maybe String
-    maybeGetAMIId InstanceInfo { instanceInfoDataCenterInfo = DataCenterAmazon {
-        amazonAmiId
-        }} = Just amazonAmiId
+    maybeGetAMIId InstanceInfo {
+        instanceInfoDataCenterInfo =
+          DataCenterAmazon AmazonDataCenterInfo { amazonAmiId }
+      } = Just amazonAmiId
     maybeGetAMIId _ = Nothing
     -- FIXME: this is copied straight out of the Eureka source code, but there's
     -- no server on my network called DISCOVERY, so I don't know how it works.
@@ -496,8 +499,9 @@ eurekaServerServiceUrlsForZone EurekaConfig {eurekaServerServiceUrls} zone =
 
 availabilityZone :: EurekaConnection -> AvailabilityZone
 availabilityZone EurekaConnection {
-    eConnDataCenterInfo = DataCenterAmazon {amazonAvailabilityZone}
-    } = amazonAvailabilityZone
+    eConnDataCenterInfo =
+      DataCenterAmazon AmazonDataCenterInfo {amazonAvailabilityZone}
+  } = amazonAvailabilityZone
 availabilityZone EurekaConnection {eConnEurekaConfig} =
     head $ availabilityZonesFromConfig eConnEurekaConfig ++ ["default"]
 
@@ -512,8 +516,9 @@ eConnAppPath eConn@EurekaConnection {
 -- hostname.
 eConnInstanceId :: EurekaConnection -> String
 eConnInstanceId EurekaConnection {
-    eConnDataCenterInfo = DataCenterAmazon { amazonInstanceId }
-    } = amazonInstanceId
+    eConnDataCenterInfo =
+      DataCenterAmazon AmazonDataCenterInfo { amazonInstanceId }
+  } = amazonInstanceId
 eConnInstanceId EurekaConnection { eConnHostname } = eConnHostname
 
 parseUrlWithAdded :: String -> String -> Request
