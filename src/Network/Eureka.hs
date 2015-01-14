@@ -228,9 +228,8 @@ eConnInstanceInfo eConn@EurekaConnection {
         , instanceSecurePort
         , instanceMetadata
         }
-    , eConnHostname
     } status = InstanceInfo {
-      instanceInfoHostName = eConnHostname
+      instanceInfoHostName = eConnPublicHostname eConn
     , instanceInfoAppName = instanceAppName
     , instanceInfoIpAddr = eConnPublicIpv4 eConn
     , instanceInfoVipAddr = eConnVirtualHostname eConn
