@@ -1,7 +1,7 @@
 {-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
 module Network.Eureka.Types (
     EurekaConfig(..), InstanceConfig(..), InstanceInfo(..), InstanceStatus(..),
-    AvailabilityZone, Region, DataCenterInfo(..),
+    AvailabilityZone, Region, DataCenterInfo(..), AmazonDataCenterInfo(..),
     toNetworkName,
     ) where
 
@@ -83,23 +83,26 @@ data InstanceConfig = InstanceConfig {
 
 type AmazonInstanceType = String
 
+data AmazonDataCenterInfo = 
+  AmazonDataCenterInfo {
+    amazonAmiId :: String ,
+    amazonAmiLaunchIndex :: Integer ,
+    amazonInstanceId :: String ,
+    amazonInstanceType :: AmazonInstanceType ,
+    amazonLocalIpv4 :: String ,
+    amazonAvailabilityZone :: AvailabilityZone ,
+    amazonPublicHostname :: String ,
+    amazonPublicIpv4 :: String
+  } deriving (Show)
+
 data DataCenterInfo = DataCenterMyOwn
-                    | DataCenterAmazon {
-      amazonAmiId :: String
-    , amazonAmiLaunchIndex :: Integer
-    , amazonInstanceId :: String
-    , amazonInstanceType :: AmazonInstanceType
-    , amazonLocalIpv4 :: String
-    , amazonAvailabilityZone :: AvailabilityZone
-    , amazonPublicHostname :: String
-    , amazonPublicIpv4 :: String
-    } deriving Show
+                    | DataCenterAmazon AmazonDataCenterInfo deriving Show
 
 instance ToJSON DataCenterInfo where
     toJSON DataCenterMyOwn = object [
         "name" .= ("MyOwn" :: String)
         ]
-    toJSON DataCenterAmazon {
+    toJSON (DataCenterAmazon AmazonDataCenterInfo {
           amazonAmiId
         , amazonAmiLaunchIndex
         , amazonInstanceId
@@ -108,7 +111,7 @@ instance ToJSON DataCenterInfo where
         , amazonAvailabilityZone
         , amazonPublicHostname
         , amazonPublicIpv4
-        } = object [
+        }) = object [
         "name" .= ("Amazon" :: String),
         "metadata" .= object [
             "ami-id" .= amazonAmiId,
@@ -129,7 +132,7 @@ instance FromJSON DataCenterInfo where
             "MyOwn" -> return DataCenterMyOwn
             "Amazon" -> do
                 metadata <- v .: "metadata"
-                DataCenterAmazon
+                DataCenterAmazon <$> (AmazonDataCenterInfo
                     <$> metadata .: "ami-id"
                     -- FIXME: should use Maybe?
                     <*> metadata .:? "ami-launch-index" .!= 0
@@ -139,6 +142,7 @@ instance FromJSON DataCenterInfo where
                     <*> metadata .: "availability-zone"
                     <*> metadata .: "public-hostname"
                     <*> metadata .: "public-ipv4"
+                  )
             other -> fail $ "unknown datacenter info: " ++ other
     parseJSON _ = mzero
 
