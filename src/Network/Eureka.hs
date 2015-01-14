@@ -420,9 +420,10 @@ updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
             return oldState { iirLastAMIId = mnewAMI }
 
     maybeGetAMIId :: InstanceInfo -> Maybe String
-    maybeGetAMIId InstanceInfo { instanceInfoDataCenterInfo = DataCenterAmazon {
-        amazonAmiId
-        }} = Just amazonAmiId
+    maybeGetAMIId InstanceInfo {
+        instanceInfoDataCenterInfo =
+          DataCenterAmazon { amazonAmiId }
+      } = Just amazonAmiId
     maybeGetAMIId _ = Nothing
     -- FIXME: this is copied straight out of the Eureka source code, but there's
     -- no server on my network called DISCOVERY, so I don't know how it works.
@@ -496,8 +497,9 @@ eurekaServerServiceUrlsForZone EurekaConfig {eurekaServerServiceUrls} zone =
 
 availabilityZone :: EurekaConnection -> AvailabilityZone
 availabilityZone EurekaConnection {
-    eConnDataCenterInfo = DataCenterAmazon {amazonAvailabilityZone}
-    } = amazonAvailabilityZone
+    eConnDataCenterInfo =
+      DataCenterAmazon {amazonAvailabilityZone}
+  } = amazonAvailabilityZone
 availabilityZone EurekaConnection {eConnEurekaConfig} =
     head $ availabilityZonesFromConfig eConnEurekaConfig ++ ["default"]
 
@@ -512,8 +514,9 @@ eConnAppPath eConn@EurekaConnection {
 -- hostname.
 eConnInstanceId :: EurekaConnection -> String
 eConnInstanceId EurekaConnection {
-    eConnDataCenterInfo = DataCenterAmazon { amazonInstanceId }
-    } = amazonInstanceId
+    eConnDataCenterInfo =
+      DataCenterAmazon { amazonInstanceId }
+  } = amazonInstanceId
 eConnInstanceId EurekaConnection { eConnHostname } = eConnHostname
 
 parseUrlWithAdded :: String -> String -> Request

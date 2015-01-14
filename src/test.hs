@@ -30,12 +30,15 @@ main = do
     updateGlobalLogger "" (setLevel level . setHandlers handlers)
 
     dataCenterInfo <- withManager defaultManagerSettings discoverDataCenterAmazon
-    withEureka (myEurekaConfig commandLineServer) myInstanceConfig dataCenterInfo $ \eConn -> do
-        result <- lookupByAppName eConn "FITBIT-SYNC-WORKER"
-        print result
-        replicateM_ 10 $ threadDelay $ 1000 * 1000
-        setStatus eConn OutOfService
-        replicateM_ 10 $ threadDelay $ 1000 * 1000
+    withEureka
+        (myEurekaConfig commandLineServer)
+        myInstanceConfig
+        dataCenterInfo $ \eConn -> do
+            result <- lookupByAppName eConn "FITBIT-SYNC-WORKER"
+            print result
+            replicateM_ 10 $ threadDelay $ 1000 * 1000
+            setStatus eConn OutOfService
+            replicateM_ 10 $ threadDelay $ 1000 * 1000
   where
     myEurekaConfig serverUrl = def {
         eurekaInstanceInfoReplicationInterval = 1,
