@@ -8,7 +8,7 @@ module Network.Eureka (withEureka,
   lookupByAppName,
   InstanceInfo(..),
   InstanceStatus(..),
-  DataCenterInfo(DataCenterMyOwn),
+  DataCenterInfo(..),
   EurekaConnection,
   AvailabilityZone,
   Region
