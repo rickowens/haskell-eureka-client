@@ -57,9 +57,9 @@ import qualified Data.Vector as V
 
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
 -- fill in an DataCenterAmazon.
-discoverDataCenterAmazon :: Manager -> IO DataCenterInfo
+discoverDataCenterAmazon :: Manager -> IO AmazonDataCenterInfo
 discoverDataCenterAmazon manager =
-    DataCenterAmazon <$> (AmazonDataCenterInfo <$>
+    AmazonDataCenterInfo <$>
         getMeta "ami-id" <*>
         (read <$> getMeta "ami-launch-index") <*>
         getMeta "instance-id" <*>
@@ -68,7 +68,6 @@ discoverDataCenterAmazon manager =
         getMeta "placement/availability-zone" <*>
         getMeta "public-hostname" <*>
         getMeta "public-ipv4"
-      )
   where
     getMeta :: String -> IO String
     getMeta pathName = fromBS . responseBody <$> httpLbs metaRequest manager

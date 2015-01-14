@@ -7,7 +7,7 @@ import Network.Eureka (withEureka,
     def,
     discoverDataCenterAmazon,
     lookupByAppName,
-    setStatus)
+    setStatus, DataCenterInfo(DataCenterAmazon))
 import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
@@ -33,7 +33,7 @@ main = do
     withEureka
         (myEurekaConfig commandLineServer)
         myInstanceConfig
-        dataCenterInfo $ \eConn -> do
+        (DataCenterAmazon dataCenterInfo) $ \eConn -> do
             result <- lookupByAppName eConn "FITBIT-SYNC-WORKER"
             print result
             replicateM_ 10 $ threadDelay $ 1000 * 1000
