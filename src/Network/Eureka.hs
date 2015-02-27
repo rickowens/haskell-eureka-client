@@ -227,8 +227,6 @@ eConnInstanceInfo eConn@EurekaConnection {
         , instanceNonSecurePort
         , instanceSecurePort
         , instanceMetadata
-        , instanceHomePageUrl
-        , instanceStatusPageUrl
         }
     } status = InstanceInfo {
       instanceInfoHostName = eConnPublicHostname eConn
@@ -239,8 +237,8 @@ eConnInstanceInfo eConn@EurekaConnection {
     , instanceInfoStatus = status
     , instanceInfoPort = instanceNonSecurePort
     , instanceInfoSecurePort = instanceSecurePort
-    , instanceInfoHomePageUrl = instanceHomePageUrl
-    , instanceInfoStatusPageUrl = fromMaybe "" instanceStatusPageUrl
+    , instanceInfoHomePageUrl = eConnHomePageUrl eConn
+    , instanceInfoStatusPageUrl = eConnStatusPageUrl eConn
     , instanceInfoDataCenterInfo = eConnDataCenterInfo
     , instanceInfoMetadata = instanceMetadata
     , instanceInfoIsCoordinatingDiscoveryServer = False
@@ -279,6 +277,39 @@ eConnPublicIpv4 EurekaConnection {
     eConnDataCenterInfo = DataCenterAmazon AmazonDataCenterInfo {
             amazonPublicIpv4 } } = amazonPublicIpv4
 eConnPublicIpv4 EurekaConnection { eConnHostIpv4 } = eConnHostIpv4
+
+-- | Return instance's status page URL.
+--
+-- The full URL should follow the format @http://${eureka.hostname}:8080/@ where
+-- the value @${eureka.hostname}@ is replaced at runtime with instance's public
+-- hostname.
+eConnStatusPageUrl :: EurekaConnection -> String
+eConnStatusPageUrl eConn@EurekaConnection {
+      eConnInstanceConfig = InstanceConfig { instanceStatusPageUrl }
+    } =
+  interpolateInstanceUrl eConn (fromMaybe "" instanceStatusPageUrl)
+
+-- | Return instance's home page URL.
+--
+-- The full URL should follow the format @http://${eureka.hostname}:8080/@ where
+-- the value @${eureka.hostname}@ is replaced at runtime with instance's public
+-- hostname.
+eConnHomePageUrl :: EurekaConnection -> String
+eConnHomePageUrl eConn@EurekaConnection {
+      eConnInstanceConfig = InstanceConfig { instanceHomePageUrl }
+    } =
+  interpolateInstanceUrl eConn instanceHomePageUrl
+
+-- | Interpolate instance URL.
+--
+-- Given a URL that follows the format @http://${eureka.hostname}:8080/@, it
+-- replaces the value @${eureka.hostname}@ with instance's public hostname.
+interpolateInstanceUrl :: EurekaConnection -> String -> String
+interpolateInstanceUrl eConn instanceUrl =
+  T.unpack $ T.replace
+    (T.pack "${eureka.hostname}")
+    (T.pack (eConnPublicHostname eConn))
+    (T.pack instanceUrl)
 
 -- | Add an additional path fragment to a base URL.
 --
