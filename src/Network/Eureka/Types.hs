@@ -159,6 +159,8 @@ data InstanceInfo = InstanceInfo {
     , instanceInfoStatus :: InstanceStatus
     , instanceInfoPort :: Int
     , instanceInfoSecurePort :: Int
+    , instanceInfoHomePageUrl :: String
+    , instanceInfoStatusPageUrl :: String
     , instanceInfoDataCenterInfo :: DataCenterInfo
     , instanceInfoMetadata :: Map String String
     , instanceInfoIsCoordinatingDiscoveryServer :: Bool
@@ -174,6 +176,8 @@ instance ToJSON InstanceInfo where
         , instanceInfoStatus
         , instanceInfoPort
         , instanceInfoSecurePort
+        , instanceInfoHomePageUrl
+        , instanceInfoStatusPageUrl
         , instanceInfoDataCenterInfo
         , instanceInfoMetadata
         , instanceInfoIsCoordinatingDiscoveryServer
@@ -181,11 +185,13 @@ instance ToJSON InstanceInfo where
         "hostName" .= instanceInfoHostName,
         "app" .= instanceInfoAppName,
         "ipAddr" .= instanceInfoIpAddr,
-        "vipAddr" .= instanceInfoVipAddr,
-        "secureVipAddr" .= instanceInfoSecureVipAddr,
+        "vipAddress" .= instanceInfoVipAddr,
+        "secureVipAddress" .= instanceInfoSecureVipAddr,
         "status" .= instanceInfoStatus,
         "port" .= instanceInfoPort,
         "securePort" .= instanceInfoSecurePort,
+        "homePageUrl" .= instanceInfoHomePageUrl,
+        "statusPageUrl" .= instanceInfoStatusPageUrl,
         "dataCenterInfo" .= instanceInfoDataCenterInfo,
         "metadata" .= instanceInfoMetadata,
         "isCoordinatingDiscoveryServer" .= instanceInfoIsCoordinatingDiscoveryServer
@@ -197,11 +203,13 @@ instance FromJSON InstanceInfo where
             <$> v .: "hostName"
             <*> v .: "app"
             <*> v .: "ipAddr"
-            <*> v .:? "vipAddr" .!= ""   -- FIXME: should vipAddr be Maybe?
-            <*> v .:? "secureVipAddr" .!= ""
+            <*> v .:? "vipAddress" .!= ""   -- FIXME: should vipAddr be Maybe?
+            <*> v .:? "secureVipAddress" .!= ""
             <*> v .: "status"
             <*> (v .: "port" >>= parsePort)
-            <*> (v .: "port" >>= parsePort)
+            <*> (v .: "securePort" >>= parsePort)
+            <*> v .: "homePageUrl"
+            <*> v .: "statusPageUrl"
             <*> v .: "dataCenterInfo"
             <*> v .: "metadata"
             <*> v .:? "isCoordinatingDiscoveryServer" .!= False

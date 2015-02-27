@@ -227,6 +227,8 @@ eConnInstanceInfo eConn@EurekaConnection {
         , instanceNonSecurePort
         , instanceSecurePort
         , instanceMetadata
+        , instanceHomePageUrl
+        , instanceStatusPageUrl
         }
     } status = InstanceInfo {
       instanceInfoHostName = eConnPublicHostname eConn
@@ -237,6 +239,8 @@ eConnInstanceInfo eConn@EurekaConnection {
     , instanceInfoStatus = status
     , instanceInfoPort = instanceNonSecurePort
     , instanceInfoSecurePort = instanceSecurePort
+    , instanceInfoHomePageUrl = instanceHomePageUrl
+    , instanceInfoStatusPageUrl = fromMaybe "" instanceStatusPageUrl
     , instanceInfoDataCenterInfo = eConnDataCenterInfo
     , instanceInfoMetadata = instanceMetadata
     , instanceInfoIsCoordinatingDiscoveryServer = False
