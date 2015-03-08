@@ -237,8 +237,8 @@ eConnInstanceInfo eConn@EurekaConnection {
     , instanceInfoStatus = status
     , instanceInfoPort = instanceNonSecurePort
     , instanceInfoSecurePort = instanceSecurePort
-    , instanceInfoHomePageUrl = eConnHomePageUrl eConn
-    , instanceInfoStatusPageUrl = eConnStatusPageUrl eConn
+    , instanceInfoHomePageUrl = Just $ eConnHomePageUrl eConn
+    , instanceInfoStatusPageUrl = Just $ eConnStatusPageUrl eConn
     , instanceInfoDataCenterInfo = eConnDataCenterInfo
     , instanceInfoMetadata = instanceMetadata
     , instanceInfoIsCoordinatingDiscoveryServer = False

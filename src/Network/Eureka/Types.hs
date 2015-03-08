@@ -159,8 +159,8 @@ data InstanceInfo = InstanceInfo {
     , instanceInfoStatus :: InstanceStatus
     , instanceInfoPort :: Int
     , instanceInfoSecurePort :: Int
-    , instanceInfoHomePageUrl :: String
-    , instanceInfoStatusPageUrl :: String
+    , instanceInfoHomePageUrl :: Maybe String
+    , instanceInfoStatusPageUrl :: Maybe String
     , instanceInfoDataCenterInfo :: DataCenterInfo
     , instanceInfoMetadata :: Map String String
     , instanceInfoIsCoordinatingDiscoveryServer :: Bool
@@ -208,8 +208,8 @@ instance FromJSON InstanceInfo where
             <*> v .: "status"
             <*> (v .: "port" >>= parsePort)
             <*> (v .: "securePort" >>= parsePort)
-            <*> v .: "homePageUrl"
-            <*> v .: "statusPageUrl"
+            <*> v .:? "homePageUrl"
+            <*> v .:? "statusPageUrl"
             <*> v .: "dataCenterInfo"
             <*> v .: "metadata"
             <*> v .:? "isCoordinatingDiscoveryServer" .!= False
