@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
-module Network.Eureka (withEureka,
+module Network.Eureka (
+  withEureka,
   EurekaConfig(..),
   InstanceConfig(..),
   def,
