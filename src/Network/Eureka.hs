@@ -7,7 +7,7 @@ module Network.Eureka (
   discoverDataCenterAmazon,
   setStatus,
   lookupByAppName,
-  lookupAllInstances,
+  lookupAllApplications,
   InstanceInfo(..),
   InstanceStatus(..),
   DataCenterInfo(..),
