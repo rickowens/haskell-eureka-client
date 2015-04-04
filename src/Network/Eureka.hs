@@ -134,7 +134,7 @@ lookupByAppName eConn@EurekaConnection { eConnManager } appName = do
 
 
 {- |
-  Returns every instances that eureka knows about, arranged by application
+  Returns all instances that eureka knows about, arranged by application
   name.
 -}
 lookupAllInstances :: EurekaConnection -> IO (Map String [InstanceInfo])
