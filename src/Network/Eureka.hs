@@ -37,9 +37,6 @@ import Network.Eureka.Types (InstanceInfo(..), EurekaConfig(..),
                              AvailabilityZone, Region, DataCenterInfo(..),
                              AmazonDataCenterInfo(..),
                              toNetworkName)
-import Network.Socket (AddrInfo(addrAddress, addrFamily),
-                       Family(AF_INET), HostName, NameInfoFlag(NI_NUMERICHOST),
-                       defaultHints, getAddrInfo, getNameInfo)
 import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             RequestBody(RequestBodyLBS),
                             Request(checkStatus, method, requestBody,
@@ -50,6 +47,9 @@ import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
                             withManager, withResponse)
 import Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
 import Network.HTTP.Types.Status (status404)
+import Network.Socket (AddrInfo(addrAddress, addrFamily),
+                       Family(AF_INET), HostName, NameInfoFlag(NI_NUMERICHOST),
+                       defaultHints, getAddrInfo, getNameInfo)
 import System.Log.Logger (debugM, errorM, infoM)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
