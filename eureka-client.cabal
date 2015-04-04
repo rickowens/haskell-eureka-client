@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                eureka-client
-version:             0.4.0.0
+version:             0.4.1.0
 synopsis:            a Eureka client library for Haskell
 -- description:
 license:             MIT
