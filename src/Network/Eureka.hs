@@ -7,6 +7,7 @@ module Network.Eureka (
   discoverDataCenterAmazon,
   setStatus,
   lookupByAppName,
+  lookupAllInstances,
   InstanceInfo(..),
   InstanceStatus(..),
   DataCenterInfo(..),
@@ -29,6 +30,7 @@ import Data.Aeson.Types (parseEither)
 import Data.Default (Default,
                      def)  -- re-export for convenience
 import Data.List (elemIndex, find, nub)
+import Data.Map (Map)
 import Data.Maybe (fromJust, fromMaybe, isNothing)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Network.BSD (getHostName)
@@ -129,6 +131,48 @@ lookupByAppName eConn@EurekaConnection { eConnManager } appName = do
         response <- eitherDecode . responseBody <$> httpLbs (request url) eConnManager
         return $ parseEither (.: "application") =<< response
     request url = requestJSON $ parseUrlWithAdded url $ "apps/" ++ appName
+
+
+{- |
+  Returns every instances that eureka knows about, arranged by application
+  name.
+-}
+lookupAllInstances :: EurekaConnection -> IO (Map String [InstanceInfo])
+lookupAllInstances eConn@EurekaConnection {eConnManager} = do
+    result <- makeRequest eConn getAllApps
+    either error (return . toAppMap) result
+  where
+    getAllApps :: String -> IO (Either String Applications)
+    getAllApps url =
+      eitherDecode . responseBody <$> httpLbs request eConnManager
+      where 
+        request = requestJSON (parseUrlWithAdded url "apps")
+
+    toAppMap :: Applications -> Map String [InstanceInfo]
+    toAppMap = Map.fromList . fmap appToTuple . applications
+
+    appToTuple :: Application -> (String, [InstanceInfo])
+    appToTuple (Application name infos) = (name, infos)
+
+
+{- |
+  Response type from Eureka "apps/" API.
+-}
+newtype Applications = Applications {applications :: [Application]}
+instance FromJSON Applications where
+  parseJSON (Object o) = do
+    -- The design of the structured data coming out of Eureka is
+    -- perplexing, to say the least.
+    Object o2 <- o.: "applications"
+    Array ary <- o2 .: "application"
+    Applications <$> mapM parseJSON (V.toList ary)
+  parseJSON v =
+    fail (
+      "Failed to parse list of all instances registered with \
+      \Eureka. Bad value was " ++ show v ++ " when it should \
+      \have been an object."
+    )
+  
 
 -- | Response type from Eureka "apps/APP_NAME" API.
 data Application = Application {
