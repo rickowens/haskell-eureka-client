@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                eureka-client
-version:             0.4.1.0
+version:             0.4.1.1
 synopsis:            a Eureka client library for Haskell
 -- description:
 license:             Apache-2.0
@@ -24,7 +24,6 @@ library
   -- other-extensions:
   build-depends:
     aeson,
-    aws-sdk,
     base,
     bytestring,
     containers,
@@ -46,7 +45,6 @@ executable test
   main-is: test.hs
   build-depends:
     aeson,
-    aws-sdk,
     base,
     bytestring,
     containers,
