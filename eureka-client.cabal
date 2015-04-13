@@ -24,7 +24,6 @@ library
   -- other-extensions:
   build-depends:
     aeson,
-    aws-sdk,
     base,
     bytestring,
     containers,
@@ -46,7 +45,6 @@ executable test
   main-is: test.hs
   build-depends:
     aeson,
-    aws-sdk,
     base,
     bytestring,
     containers,
