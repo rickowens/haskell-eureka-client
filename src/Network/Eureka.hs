@@ -1,4 +1,5 @@
-{-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Network.Eureka (
   withEureka,
   EurekaConfig(..),
@@ -14,49 +15,55 @@ module Network.Eureka (
   AmazonDataCenterInfo(..),
   EurekaConnection,
   AvailabilityZone,
-  Region
+  Region,
+  addMetadata
 ) where
 
-import Control.Applicative ((<$>), (<*>))
-import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
-import Control.Concurrent.STM (TVar, atomically, newTVar, readTVar, writeTVar)
-import Control.Exception (bracket, throw, try, SomeException)
-import Control.Monad (foldM, mzero, when)
-import Control.Monad.Fix (mfix)
-import Data.Aeson (eitherDecode, encode, object, (.=), (.:),
-                   FromJSON(parseJSON),
-                   Value(Object, Array))
-import Data.Aeson.Types (parseEither)
-import Data.Default (Default,
-                     def)  -- re-export for convenience
-import Data.List (elemIndex, find, nub)
-import Data.Map (Map)
-import Data.Maybe (fromJust, fromMaybe, isNothing)
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import Network.BSD (getHostName)
-import Network.Eureka.Types (InstanceInfo(..), EurekaConfig(..),
-                             InstanceConfig(..), InstanceStatus(..),
-                             AvailabilityZone, Region, DataCenterInfo(..),
-                             AmazonDataCenterInfo(..),
-                             toNetworkName)
-import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
-                            RequestBody(RequestBodyLBS),
-                            Request(checkStatus, method, requestBody,
-                                    requestHeaders),
-                            defaultManagerSettings, httpLbs,
-                            parseUrl, queryString,
-                            responseStatus, responseBody,
-                            withManager, withResponse)
-import Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
-import Network.HTTP.Types.Status (status404)
-import Network.Socket (AddrInfo(addrAddress, addrFamily),
-                       Family(AF_INET), HostName, NameInfoFlag(NI_NUMERICHOST),
-                       defaultHints, getAddrInfo, getNameInfo)
-import System.Log.Logger (debugM, errorM, infoM)
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Map as Map
-import qualified Data.Text as T
-import qualified Data.Vector as V
+import           Control.Applicative       ((<$>), (<*>))
+import           Control.Concurrent        (ThreadId, forkIO, killThread,
+                                            threadDelay)
+import           Control.Concurrent.STM    (TVar, atomically, newTVar, readTVar,
+                                            writeTVar)
+import           Control.Exception         (SomeException, bracket, throw, try)
+import           Control.Monad             (foldM, mzero, when)
+import           Control.Monad.Fix         (mfix)
+import           Data.Aeson                (FromJSON (parseJSON),
+                                            Value (Object, Array), eitherDecode,
+                                            encode, object, (.:), (.=))
+import           Data.Aeson.Types          (parseEither)
+import qualified Data.ByteString.Lazy      as LBS
+import           Data.Default              (Default, def)
+import           Data.List                 (elemIndex, find, nub)
+import           Data.Map                  (Map)
+import qualified Data.Map                  as Map
+import           Data.Maybe                (fromJust, fromMaybe, isNothing)
+import qualified Data.Text                 as T
+import           Data.Text.Encoding        (decodeUtf8, encodeUtf8)
+import qualified Data.Vector               as V
+import           Network.BSD               (getHostName)
+import           Network.Eureka.Types      (AmazonDataCenterInfo (..),
+                                            AvailabilityZone,
+                                            DataCenterInfo (..),
+                                            EurekaConfig (..),
+                                            InstanceConfig (..),
+                                            InstanceInfo (..),
+                                            InstanceStatus (..), Region,
+                                            toNetworkName)
+import           Network.HTTP.Client       (HttpException (HandshakeFailed),
+                                            Manager, Request (checkStatus, method, requestBody, requestHeaders),
+                                            RequestBody (RequestBodyLBS),
+                                            defaultManagerSettings, httpLbs,
+                                            parseUrl, queryString, responseBody,
+                                            responseStatus, withManager,
+                                            withResponse)
+import           Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
+import           Network.HTTP.Types.Status (status404)
+import           Network.Socket            (AddrInfo (addrAddress, addrFamily),
+                                            Family (AF_INET), HostName,
+                                            NameInfoFlag (NI_NUMERICHOST),
+                                            defaultHints, getAddrInfo,
+                                            getNameInfo)
+import           System.Log.Logger         (debugM, errorM, infoM)
 
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
 -- fill in an DataCenterAmazon.
@@ -79,24 +86,24 @@ discoverDataCenterAmazon manager =
         fromBS = T.unpack . decodeUtf8 . LBS.toStrict
 
 data EurekaConnection = EurekaConnection {
-      eConnEurekaConfig :: EurekaConfig
+      eConnEurekaConfig                 :: EurekaConfig
       -- ^ The configuration specifying where Eureka is.
-    , eConnInstanceConfig :: InstanceConfig
+    , eConnInstanceConfig               :: InstanceConfig
       -- ^ The configuration about this instance and how it will talk to Eureka.
-    , eConnDataCenterInfo :: DataCenterInfo
+    , eConnDataCenterInfo               :: DataCenterInfo
       -- ^ Datacenter info discovered at runtime.
-    , eConnHeartbeatThread :: ThreadId
+    , eConnHeartbeatThread              :: ThreadId
       -- ^ Thread that periodically posts a heartbeat to Eureka so that it knows
       -- we're still alive.
     , eConnInstanceInfoReplicatorThread :: ThreadId
       -- ^ Thread that periodically pushes instance information to Eureka.
-    , eConnManager :: Manager
+    , eConnManager                      :: Manager
       -- ^ HTTP manager that we use to make requests.
-    , eConnHostname :: HostName
+    , eConnHostname                     :: HostName
       -- ^ Base hostname gotten from the system at startup.
-    , eConnHostIpv4 :: String
+    , eConnHostIpv4                     :: String
       -- ^ IPv4 address we got for the above hostname at startup.
-    , eConnStatus :: TVar InstanceStatus
+    , eConnStatus                       :: TVar InstanceStatus
       -- ^ Current status of this instance.
     }
 
@@ -145,7 +152,7 @@ lookupAllApplications eConn@EurekaConnection {eConnManager} = do
     getAllApps :: String -> IO (Either String Applications)
     getAllApps url =
       eitherDecode . responseBody <$> httpLbs request eConnManager
-      where 
+      where
         request = requestJSON (parseUrlWithAdded url "apps")
 
     toAppMap :: Applications -> Map String [InstanceInfo]
@@ -172,11 +179,11 @@ instance FromJSON Applications where
       \Eureka. Bad value was " ++ show v ++ " when it should \
       \have been an object."
     )
-  
+
 
 -- | Response type from Eureka "apps/APP_NAME" API.
 data Application = Application {
-    _applicationName :: String,
+    _applicationName         :: String,
     applicationInstanceInfos :: [InstanceInfo]
     } deriving Show
 
@@ -627,3 +634,11 @@ repeating i f = loop
 -- [[1,2,3,4],[2,3,4,1],[3,4,1,2],[4,1,2,3]]
 rotations :: [a] -> [[a]]
 rotations lst = map (take (length lst) . flip drop (cycle lst)) [0..length lst - 1]
+
+-- | Adds a key-value pair to InstanceConfig's existing metadata.
+addMetadata
+  :: (String, String)
+  -> InstanceConfig
+  -> InstanceConfig
+addMetadata (key, value) info@InstanceConfig{instanceMetadata = metadata}
+  = info {instanceMetadata = Map.insert key value metadata}
