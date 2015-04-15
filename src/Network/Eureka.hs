@@ -1,4 +1,5 @@
-{-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Network.Eureka (
   withEureka,
   EurekaConfig(..),
@@ -14,49 +15,55 @@ module Network.Eureka (
   AmazonDataCenterInfo(..),
   EurekaConnection,
   AvailabilityZone,
-  Region
+  Region,
+  addMetadata
 ) where
 
-import Control.Applicative ((<$>), (<*>))
-import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
-import Control.Concurrent.STM (TVar, atomically, newTVar, readTVar, writeTVar)
-import Control.Exception (bracket, throw, try, SomeException)
-import Control.Monad (foldM, mzero, when)
-import Control.Monad.Fix (mfix)
-import Data.Aeson (eitherDecode, encode, object, (.=), (.:),
-                   FromJSON(parseJSON),
-                   Value(Object, Array))
-import Data.Aeson.Types (parseEither)
-import Data.Default (Default,
-                     def)  -- re-export for convenience
-import Data.List (elemIndex, find, nub)
-import Data.Map (Map)
-import Data.Maybe (fromJust, fromMaybe, isNothing)
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import Network.BSD (getHostName)
-import Network.Eureka.Types (InstanceInfo(..), EurekaConfig(..),
-                             InstanceConfig(..), InstanceStatus(..),
-                             AvailabilityZone, Region, DataCenterInfo(..),
-                             AmazonDataCenterInfo(..),
-                             toNetworkName)
-import Network.HTTP.Client (HttpException(HandshakeFailed), Manager,
-                            RequestBody(RequestBodyLBS),
-                            Request(checkStatus, method, requestBody,
-                                    requestHeaders),
-                            defaultManagerSettings, httpLbs,
-                            parseUrl, queryString,
-                            responseStatus, responseBody,
-                            withManager, withResponse)
-import Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
-import Network.HTTP.Types.Status (status404)
-import Network.Socket (AddrInfo(addrAddress, addrFamily),
-                       Family(AF_INET), HostName, NameInfoFlag(NI_NUMERICHOST),
-                       defaultHints, getAddrInfo, getNameInfo)
-import System.Log.Logger (debugM, errorM, infoM)
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Map as Map
-import qualified Data.Text as T
-import qualified Data.Vector as V
+import           Control.Applicative       ((<$>), (<*>))
+import           Control.Concurrent        (ThreadId, forkIO, killThread,
+                                            threadDelay)
+import           Control.Concurrent.STM    (TVar, atomically, newTVar, readTVar,
+                                            writeTVar)
+import           Control.Exception         (SomeException, bracket, throw, try)
+import           Control.Monad             (foldM, mzero, when)
+import           Control.Monad.Fix         (mfix)
+import           Data.Aeson                (FromJSON (parseJSON),
+                                            Value (Object, Array), eitherDecode,
+                                            encode, object, (.:), (.=))
+import           Data.Aeson.Types          (parseEither)
+import qualified Data.ByteString.Lazy      as LBS
+import           Data.Default              (Default, def)
+import           Data.List                 (elemIndex, find, nub)
+import           Data.Map                  (Map)
+import qualified Data.Map                  as Map
+import           Data.Maybe                (fromJust, fromMaybe, isNothing)
+import qualified Data.Text                 as T
+import           Data.Text.Encoding        (decodeUtf8, encodeUtf8)
+import qualified Data.Vector               as V
+import           Network.BSD               (getHostName)
+import           Network.Eureka.Types      (AmazonDataCenterInfo (..),
+                                            AvailabilityZone,
+                                            DataCenterInfo (..),
+                                            EurekaConfig (..),
+                                            InstanceConfig (..),
+                                            InstanceInfo (..),
+                                            InstanceStatus (..), Region,
+                                            toNetworkName)
+import           Network.HTTP.Client       (HttpException (HandshakeFailed),
+                                            Manager, Request (checkStatus, method, requestBody, requestHeaders),
+                                            RequestBody (RequestBodyLBS),
+                                            defaultManagerSettings, httpLbs,
+                                            parseUrl, queryString, responseBody,
+                                            responseStatus, withManager,
+                                            withResponse)
+import           Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
+import           Network.HTTP.Types.Status (status404)
+import           Network.Socket            (AddrInfo (addrAddress, addrFamily),
+                                            Family (AF_INET), HostName,
+                                            NameInfoFlag (NI_NUMERICHOST),
+                                            defaultHints, getAddrInfo,
+                                            getNameInfo)
+import           System.Log.Logger         (debugM, errorM, infoM)
 
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
 -- fill in an DataCenterAmazon.
@@ -172,11 +179,11 @@ instance FromJSON Applications where
       \Eureka. Bad value was " ++ show v ++ " when it should \
       \have been an object."
     )
-  
+
 
 -- | Response type from Eureka "apps/APP_NAME" API.
 data Application = Application {
-    _applicationName :: String,
+    _applicationName         :: String,
     applicationInstanceInfos :: [InstanceInfo]
     } deriving Show
 
