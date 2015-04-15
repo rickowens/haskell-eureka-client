@@ -86,24 +86,24 @@ discoverDataCenterAmazon manager =
         fromBS = T.unpack . decodeUtf8 . LBS.toStrict
 
 data EurekaConnection = EurekaConnection {
-      eConnEurekaConfig :: EurekaConfig
+      eConnEurekaConfig                 :: EurekaConfig
       -- ^ The configuration specifying where Eureka is.
-    , eConnInstanceConfig :: InstanceConfig
+    , eConnInstanceConfig               :: InstanceConfig
       -- ^ The configuration about this instance and how it will talk to Eureka.
-    , eConnDataCenterInfo :: DataCenterInfo
+    , eConnDataCenterInfo               :: DataCenterInfo
       -- ^ Datacenter info discovered at runtime.
-    , eConnHeartbeatThread :: ThreadId
+    , eConnHeartbeatThread              :: ThreadId
       -- ^ Thread that periodically posts a heartbeat to Eureka so that it knows
       -- we're still alive.
     , eConnInstanceInfoReplicatorThread :: ThreadId
       -- ^ Thread that periodically pushes instance information to Eureka.
-    , eConnManager :: Manager
+    , eConnManager                      :: Manager
       -- ^ HTTP manager that we use to make requests.
-    , eConnHostname :: HostName
+    , eConnHostname                     :: HostName
       -- ^ Base hostname gotten from the system at startup.
-    , eConnHostIpv4 :: String
+    , eConnHostIpv4                     :: String
       -- ^ IPv4 address we got for the above hostname at startup.
-    , eConnStatus :: TVar InstanceStatus
+    , eConnStatus                       :: TVar InstanceStatus
       -- ^ Current status of this instance.
     }
 
@@ -152,7 +152,7 @@ lookupAllApplications eConn@EurekaConnection {eConnManager} = do
     getAllApps :: String -> IO (Either String Applications)
     getAllApps url =
       eitherDecode . responseBody <$> httpLbs request eConnManager
-      where 
+      where
         request = requestJSON (parseUrlWithAdded url "apps")
 
     toAppMap :: Applications -> Map String [InstanceInfo]
@@ -634,3 +634,11 @@ repeating i f = loop
 -- [[1,2,3,4],[2,3,4,1],[3,4,1,2],[4,1,2,3]]
 rotations :: [a] -> [[a]]
 rotations lst = map (take (length lst) . flip drop (cycle lst)) [0..length lst - 1]
+
+-- | Adds a key-value pair to InstanceConfig's existing metadata.
+addMetadata
+  :: (String, String)
+  -> InstanceConfig
+  -> InstanceConfig
+addMetadata (key, value) info@InstanceConfig{instanceMetadata = metadata}
+  = info {instanceMetadata = Map.insert key value metadata}
