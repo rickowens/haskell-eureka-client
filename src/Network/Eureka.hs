@@ -16,7 +16,8 @@ module Network.Eureka (
   EurekaConnection,
   AvailabilityZone,
   Region,
-  addMetadata
+  addMetadata,
+  lookupMetadata
 ) where
 
 import           Control.Applicative       ((<$>), (<*>))
@@ -642,3 +643,11 @@ addMetadata
   -> InstanceConfig
 addMetadata (key, value) info@InstanceConfig{instanceMetadata = metadata}
   = info {instanceMetadata = Map.insert key value metadata}
+
+-- | Looks up a value corresponding to a given key in InstanceConfig's metadata.
+lookupMetadata
+  :: String
+  -> InstanceConfig
+  -> Maybe String
+lookupMetadata key InstanceConfig{instanceMetadata = metadata}
+  = Map.lookup key metadata
