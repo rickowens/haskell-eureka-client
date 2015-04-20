@@ -647,7 +647,7 @@ addMetadata (key, value) info@InstanceConfig{instanceMetadata = metadata}
 -- | Looks up a value corresponding to a given key in InstanceConfig's metadata.
 lookupMetadata
   :: String
-  -> InstanceConfig
+  -> InstanceInfo
   -> Maybe String
-lookupMetadata key InstanceConfig{instanceMetadata = metadata}
+lookupMetadata key InstanceInfo{instanceInfoMetadata = metadata}
   = Map.lookup key metadata
