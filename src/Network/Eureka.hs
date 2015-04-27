@@ -66,6 +66,8 @@ import           Network.Socket            (AddrInfo (addrAddress, addrFamily),
                                             getNameInfo)
 import           System.Log.Logger         (debugM, errorM, infoM)
 
+import Network.Eureka.Util (parseUrlWithAdded)
+
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
 -- fill in an DataCenterAmazon.
 discoverDataCenterAmazon :: Manager -> IO AmazonDataCenterInfo
@@ -364,15 +366,7 @@ interpolateInstanceUrl eConn instanceUrl =
     (T.pack (eConnPublicHostname eConn))
     (T.pack instanceUrl)
 
--- | Add an additional path fragment to a base URL.
---
--- I tried doing this using the http-types library but it was just so
--- inconvenient that I fell back to doing it this way. Alternative
--- implementations welcomed.
-addPath :: String -> String -> String
-addPath base additional = baseWithSlash ++ additional
-  where
-    baseWithSlash = if last base == '/' then base else base ++ "/"
+
 
 disconnectEureka :: EurekaConnection -> IO ()
 disconnectEureka eConn@EurekaConnection {
@@ -607,9 +601,6 @@ eConnInstanceId EurekaConnection {
       DataCenterAmazon AmazonDataCenterInfo { amazonInstanceId }
   } = amazonInstanceId
 eConnInstanceId EurekaConnection { eConnHostname } = eConnHostname
-
-parseUrlWithAdded :: String -> String -> Request
-parseUrlWithAdded url = fromJust . parseUrl . addPath url
 
 parseUrlWithAppPath :: String -> EurekaConnection -> Request
 parseUrlWithAppPath url = parseUrlWithAdded url . eConnAppPath
