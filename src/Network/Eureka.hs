@@ -68,6 +68,7 @@ import           Network.Socket            (AddrInfo (addrAddress, addrFamily),
                                             getNameInfo)
 import           System.Log.Logger         (debugM, errorM, infoM)
 
+import Network.Eureka.Request (makeRequest)
 import Network.Eureka.Util (parseUrlWithAdded)
 
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
@@ -183,34 +184,6 @@ setStatus eConn@EurekaConnection { eConnManager, eConnStatus } newStatus = do
         , queryString = encodeUtf8 . T.pack $ "value=" ++ toNetworkName newStatus
         }
 
--- | Provide a list of Eureka servers, with the ones in the same AZ as us first.
--- Any of these Eureka servers are acceptable to maintain health in the face of
--- failure, but the ones in the same zone have lower latency, so are preferred.
-eurekaUrlsByProximity :: EurekaConfig -> AvailabilityZone -> [String]
-eurekaUrlsByProximity eConfig thisZone =
-    nub
-    . concatMap (eurekaServerServiceUrlsForZone eConfig)
-    . thisZoneFirst
-    . availabilityZonesFromConfig
-    $ eConfig
-  where
-    -- | Return the rotation of the list of availability zones that has this
-    -- current zone first.
-    --
-    -- Rotations are used rather than just pulling the present zone to the front
-    -- of the list because this is the algorithm that the Java Eureka client
-    -- uses to order availability zones. Presumably this is to try to not
-    -- dogpile servers in the first availability zone in case of failure.
-    thisZoneFirst :: [AvailabilityZone] -> [AvailabilityZone]
-    thisZoneFirst zones = case elemIndex thisZone zones of
-        -- If our current zone isn't present, try falling back to "default".
-        Nothing -> case elemIndex "default" zones of
-            Nothing -> error $ "couldn't find " ++ thisZone ++ " in zones " ++ show zones
-            _ -> ["default"]
-        -- fromJust is safe here because if the element is in the list, some
-        -- rotation will put the element at the front.
-        _ -> fromJust . find ((== thisZone) . head) . rotations $ zones
-
 registerInstance :: EurekaConnection -> IO ()
 registerInstance eConn@EurekaConnection { eConnManager,
         eConnInstanceConfig = InstanceConfig {instanceAppName}
@@ -229,7 +202,6 @@ registerInstance eConn@EurekaConnection { eConnManager,
             "instance" .= instanceInfo
             ]
         }
-
 
 -- | Read the instance's status and use it to produce an InstanceInfo.
 readEConnInstanceInfo :: EurekaConnection -> IO InstanceInfo
@@ -504,44 +476,6 @@ connectEureka manager
     instanceInfoThread = repeating instanceInfoInterval . updateInstanceInfo
     myHints = defaultHints { addrFamily = AF_INET }
 
--- | Make a request of each of the available servers. In case a server fails,
--- try consecutive servers until one works (or we run out of servers). If all
--- servers fail, throw the last exception we got.
-makeRequest :: EurekaConnection -> (String -> IO a) -> IO a
-makeRequest conn@EurekaConnection {eConnEurekaConfig}
-    action = do
-    result <- foldM tryNext (Left HandshakeFailed) urls
-    case result of
-        Left bad -> throw bad
-        Right good -> return good
-  where
-    urls = eurekaUrlsByProximity eConnEurekaConfig (availabilityZone conn)
-    (Left _) `tryNext` nextUrl = try (action nextUrl)
-    (Right good) `tryNext` _ = return (Right good)
-
-availabilityZonesFromConfig :: EurekaConfig -> [AvailabilityZone]
-availabilityZonesFromConfig EurekaConfig{eurekaAvailabilityZones, eurekaRegion} =
-    fromMaybe
-        -- If we don't have any listed for this region, there's always the
-        -- "default" availability zone.
-        ["default"]
-        (Map.lookup eurekaRegion eurekaAvailabilityZones)
-
-eurekaServerServiceUrlsForZone :: EurekaConfig -> AvailabilityZone -> [String]
-eurekaServerServiceUrlsForZone EurekaConfig {eurekaServerServiceUrls} zone =
-    fromMaybe
-        (error $ "couldn't find any Eureka server URLs for zone " ++ show zone
-          ++ " in service config " ++ show eurekaServerServiceUrls)
-        (Map.lookup zone eurekaServerServiceUrls)
-
-availabilityZone :: EurekaConnection -> AvailabilityZone
-availabilityZone EurekaConnection {
-    eConnDataCenterInfo =
-      DataCenterAmazon AmazonDataCenterInfo {amazonAvailabilityZone}
-  } = amazonAvailabilityZone
-availabilityZone EurekaConnection {eConnEurekaConfig} =
-    head $ availabilityZonesFromConfig eConnEurekaConfig ++ ["default"]
-
 eConnAppPath :: EurekaConnection -> String
 eConnAppPath eConn@EurekaConnection {
     eConnInstanceConfig = InstanceConfig {instanceAppName}
@@ -576,12 +510,6 @@ repeating i f = loop
         result <- f a0
         threadDelay (i * 1000 * 1000)
         loop result
-
--- | Generate a list of rotations of a list.
--- > rotations [1..4]
--- [[1,2,3,4],[2,3,4,1],[3,4,1,2],[4,1,2,3]]
-rotations :: [a] -> [[a]]
-rotations lst = map (take (length lst) . flip drop (cycle lst)) [0..length lst - 1]
 
 -- | Adds a key-value pair to InstanceConfig's existing metadata.
 addMetadata
