@@ -33,6 +33,22 @@ makeRequest conn@EurekaConnection {eConnEurekaConfig}
     (Left _) `tryNext` nextUrl = try (action nextUrl)
     (Right good) `tryNext` _ = return (Right good)
 
+    availabilityZone :: EurekaConnection -> AvailabilityZone
+    availabilityZone EurekaConnection {
+        eConnDataCenterInfo =
+          DataCenterAmazon AmazonDataCenterInfo {amazonAvailabilityZone}
+      } = amazonAvailabilityZone
+    availabilityZone EurekaConnection {eConnEurekaConfig = eConfig} =
+        head $ availabilityZonesFromConfig eConfig ++ ["default"]
+
+    availabilityZonesFromConfig :: EurekaConfig -> [AvailabilityZone]
+    availabilityZonesFromConfig EurekaConfig{eurekaAvailabilityZones, eurekaRegion} =
+        fromMaybe
+            -- If we don't have any listed for this region, there's always the
+            -- "default" availability zone.
+            ["default"]
+            (Map.lookup eurekaRegion eurekaAvailabilityZones)
+
     -- | Provide a list of Eureka servers, with the ones in the same AZ as us first.
     -- Any of these Eureka servers are acceptable to maintain health in the face of
     -- failure, but the ones in the same zone have lower latency, so are preferred.
@@ -60,34 +76,17 @@ makeRequest conn@EurekaConnection {eConnEurekaConfig}
             -- fromJust is safe here because if the element is in the list, some
             -- rotation will put the element at the front.
             _ -> fromJust . find ((== thisZone) . head) . rotations $ zones
+          where
+            -- | Generate a list of rotations of a list.
+            -- > rotations [1..4]
+            -- [[1,2,3,4],[2,3,4,1],[3,4,1,2],[4,1,2,3]]
+            rotations :: [a] -> [[a]]
+            rotations lst = map (take (length lst) . flip drop (cycle lst)) [0..length lst - 1]
 
-availabilityZonesFromConfig :: EurekaConfig -> [AvailabilityZone]
-availabilityZonesFromConfig EurekaConfig{eurekaAvailabilityZones, eurekaRegion} =
-    fromMaybe
-        -- If we don't have any listed for this region, there's always the
-        -- "default" availability zone.
-        ["default"]
-        (Map.lookup eurekaRegion eurekaAvailabilityZones)
-
-eurekaServerServiceUrlsForZone :: EurekaConfig -> AvailabilityZone -> [String]
-eurekaServerServiceUrlsForZone EurekaConfig {eurekaServerServiceUrls} zone =
-    fromMaybe
-        (error $ "couldn't find any Eureka server URLs for zone " ++ show zone
-          ++ " in service config " ++ show eurekaServerServiceUrls)
-        (Map.lookup zone eurekaServerServiceUrls)
-
-availabilityZone :: EurekaConnection -> AvailabilityZone
-availabilityZone EurekaConnection {
-    eConnDataCenterInfo =
-      DataCenterAmazon AmazonDataCenterInfo {amazonAvailabilityZone}
-  } = amazonAvailabilityZone
-availabilityZone EurekaConnection {eConnEurekaConfig} =
-    head $ availabilityZonesFromConfig eConnEurekaConfig ++ ["default"]
-
--- | Generate a list of rotations of a list.
--- > rotations [1..4]
--- [[1,2,3,4],[2,3,4,1],[3,4,1,2],[4,1,2,3]]
-rotations :: [a] -> [[a]]
-rotations lst = map (take (length lst) . flip drop (cycle lst)) [0..length lst - 1]
-
+        eurekaServerServiceUrlsForZone :: EurekaConfig -> AvailabilityZone -> [String]
+        eurekaServerServiceUrlsForZone EurekaConfig {eurekaServerServiceUrls} zone =
+            fromMaybe
+                (error $ "couldn't find any Eureka server URLs for zone " ++ show zone
+                  ++ " in service config " ++ show eurekaServerServiceUrls)
+                (Map.lookup zone eurekaServerServiceUrls)
 
