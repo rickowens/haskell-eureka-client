@@ -68,6 +68,7 @@ import           Network.Socket            (AddrInfo (addrAddress, addrFamily),
                                             getNameInfo)
 import           System.Log.Logger         (debugM, errorM, infoM)
 
+import Network.Eureka.Metadata (addMetadata, lookupMetadata)
 import Network.Eureka.Request (makeRequest)
 import Network.Eureka.Util (parseUrlWithAdded)
 
@@ -511,18 +512,4 @@ repeating i f = loop
         threadDelay (i * 1000 * 1000)
         loop result
 
--- | Adds a key-value pair to InstanceConfig's existing metadata.
-addMetadata
-  :: (String, String)
-  -> InstanceConfig
-  -> InstanceConfig
-addMetadata (key, value) info@InstanceConfig{instanceMetadata = metadata}
-  = info {instanceMetadata = Map.insert key value metadata}
 
--- | Looks up a value corresponding to a given key in InstanceConfig's metadata.
-lookupMetadata
-  :: String
-  -> InstanceInfo
-  -> Maybe String
-lookupMetadata key InstanceInfo{instanceInfoMetadata = metadata}
-  = Map.lookup key metadata
