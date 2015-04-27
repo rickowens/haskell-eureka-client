@@ -33,7 +33,7 @@ import           Data.Aeson                (FromJSON (parseJSON),
                                             encode, object, (.:), (.=))
 import           Data.Aeson.Types          (parseEither)
 import qualified Data.ByteString.Lazy      as LBS
-import           Data.Default              (Default, def)
+import           Data.Default              (def)
 import           Data.List                 (elemIndex, find, nub)
 import           Data.Map                  (Map)
 import qualified Data.Map                  as Map
@@ -46,6 +46,8 @@ import           Network.Eureka.Types      (AmazonDataCenterInfo (..),
                                             AvailabilityZone,
                                             DataCenterInfo (..),
                                             EurekaConfig (..),
+                                            EurekaConnection (..),
+                                            IIRState (..),
                                             InstanceConfig (..),
                                             InstanceInfo (..),
                                             InstanceStatus (..), Region,
@@ -87,40 +89,6 @@ discoverDataCenterAmazon manager =
       where
         metaRequest = fromJust . parseUrl $ "http://169.254.169.254/latest/meta-data/" ++ pathName
         fromBS = T.unpack . decodeUtf8 . LBS.toStrict
-
-data EurekaConnection = EurekaConnection {
-      eConnEurekaConfig                 :: EurekaConfig
-      -- ^ The configuration specifying where Eureka is.
-    , eConnInstanceConfig               :: InstanceConfig
-      -- ^ The configuration about this instance and how it will talk to Eureka.
-    , eConnDataCenterInfo               :: DataCenterInfo
-      -- ^ Datacenter info discovered at runtime.
-    , eConnHeartbeatThread              :: ThreadId
-      -- ^ Thread that periodically posts a heartbeat to Eureka so that it knows
-      -- we're still alive.
-    , eConnInstanceInfoReplicatorThread :: ThreadId
-      -- ^ Thread that periodically pushes instance information to Eureka.
-    , eConnManager                      :: Manager
-      -- ^ HTTP manager that we use to make requests.
-    , eConnHostname                     :: HostName
-      -- ^ Base hostname gotten from the system at startup.
-    , eConnHostIpv4                     :: String
-      -- ^ IPv4 address we got for the above hostname at startup.
-    , eConnStatus                       :: TVar InstanceStatus
-      -- ^ Current status of this instance.
-    }
-
-instance Show EurekaConnection where
-    show EurekaConnection {eConnEurekaConfig, eConnInstanceConfig,
-                           eConnDataCenterInfo,
-                           eConnHeartbeatThread,
-                           eConnInstanceInfoReplicatorThread} =
-        "EurekaConnection {eConnEurekaConfig=" ++ show eConnEurekaConfig ++
-        ", eConnInstanceConfig=" ++ show eConnInstanceConfig ++
-        ", eConnDataCenterInfo=" ++ show eConnDataCenterInfo ++
-        ", eConnHeartbeatThread=" ++ show eConnHeartbeatThread ++
-        ", eConnInstanceInfoReplicatorThread=" ++ show eConnInstanceInfoReplicatorThread ++
-        "}"
 
 withEureka :: EurekaConfig -> InstanceConfig -> DataCenterInfo
            -> (EurekaConnection -> IO a) -> IO a
@@ -439,18 +407,6 @@ postHeartbeat eConn@EurekaConnection {
           method = methodPut,
           checkStatus = \_ _ _ -> Nothing   -- so we can reregister if we get a 404
           }
-
--- | "IIR" stands for "instance info replicator", which is this thread's name
-data IIRState = IIRState {
-      iirLastAMIId :: Maybe String
-      -- ^ The AMI ID of the coordinating server the last time we saw it.
-      -- 'Nothing' on our first run.
-    } deriving Show
-
-instance Default IIRState where
-    def = IIRState {
-        iirLastAMIId = Nothing
-        }
 
 updateInstanceInfo :: EurekaConnection -> IIRState -> IO IIRState
 updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do

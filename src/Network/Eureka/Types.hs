@@ -1,10 +1,13 @@
 {-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
 module Network.Eureka.Types (
-    EurekaConfig(..), InstanceConfig(..), InstanceInfo(..), InstanceStatus(..),
-    AvailabilityZone, Region, DataCenterInfo(..), AmazonDataCenterInfo(..),
-    toNetworkName,
+    EurekaConnection(..), EurekaConfig(..), InstanceConfig(..), InstanceInfo(..), InstanceStatus(..),
+    AvailabilityZone, Region, DataCenterInfo(..), AmazonDataCenterInfo(..), IIRState(..),
+    toNetworkName
     ) where
 
+import Control.Concurrent        (ThreadId)
+import Control.Concurrent.STM    (TVar)
+import Network.HTTP.Client       (Manager)
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (mzero, (>=>))
 import Data.Aeson (object, FromJSON(parseJSON), ToJSON(toJSON), Value(Object),
@@ -19,8 +22,43 @@ import qualified Data.Aeson as Aeson (Value(String))
 import qualified Data.Map as Map
 import qualified Data.Text as T
 
+
 type AvailabilityZone = String
 type Region = String
+
+data EurekaConnection = EurekaConnection {
+      eConnEurekaConfig                 :: EurekaConfig
+      -- ^ The configuration specifying where Eureka is.
+    , eConnInstanceConfig               :: InstanceConfig
+      -- ^ The configuration about this instance and how it will talk to Eureka.
+    , eConnDataCenterInfo               :: DataCenterInfo
+      -- ^ Datacenter info discovered at runtime.
+    , eConnHeartbeatThread              :: ThreadId
+      -- ^ Thread that periodically posts a heartbeat to Eureka so that it knows
+      -- we're still alive.
+    , eConnInstanceInfoReplicatorThread :: ThreadId
+      -- ^ Thread that periodically pushes instance information to Eureka.
+    , eConnManager                      :: Manager
+      -- ^ HTTP manager that we use to make requests.
+    , eConnHostname                     :: HostName
+      -- ^ Base hostname gotten from the system at startup.
+    , eConnHostIpv4                     :: String
+      -- ^ IPv4 address we got for the above hostname at startup.
+    , eConnStatus                       :: TVar InstanceStatus
+      -- ^ Current status of this instance.
+    }
+
+instance Show EurekaConnection where
+    show EurekaConnection {eConnEurekaConfig, eConnInstanceConfig,
+                           eConnDataCenterInfo,
+                           eConnHeartbeatThread,
+                           eConnInstanceInfoReplicatorThread} =
+        "EurekaConnection {eConnEurekaConfig=" ++ show eConnEurekaConfig ++
+        ", eConnInstanceConfig=" ++ show eConnInstanceConfig ++
+        ", eConnDataCenterInfo=" ++ show eConnDataCenterInfo ++
+        ", eConnHeartbeatThread=" ++ show eConnHeartbeatThread ++
+        ", eConnInstanceInfoReplicatorThread=" ++ show eConnInstanceInfoReplicatorThread ++
+        "}"
 
 -- | Configuration necessary to speak to a Eureka server.  This corresponds to
 -- the EurekaClientConfig class in Netflix's implementation.
@@ -80,6 +118,18 @@ data InstanceConfig = InstanceConfig {
       -- services might not be ready at startup, in which case this should be
       -- false.
     } deriving Show
+
+-- | "IIR" stands for "instance info replicator", which is this thread's name
+data IIRState = IIRState {
+      iirLastAMIId :: Maybe String
+      -- ^ The AMI ID of the coordinating server the last time we saw it.
+      -- 'Nothing' on our first run.
+    } deriving Show
+
+instance Default IIRState where
+    def = IIRState {
+        iirLastAMIId = Nothing
+        }
 
 type AmazonInstanceType = String
 
