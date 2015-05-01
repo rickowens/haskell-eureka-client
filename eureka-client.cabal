@@ -19,7 +19,12 @@ library
   exposed-modules:
     Network.Eureka
   other-modules:
+    Network.Eureka.Application
+    Network.Eureka.Connection
+    Network.Eureka.Metadata
+    Network.Eureka.Request
     Network.Eureka.Types
+    Network.Eureka.Util
 
   -- other-extensions:
   build-depends:
