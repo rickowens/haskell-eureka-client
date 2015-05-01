@@ -31,7 +31,6 @@ library
     hslogger,
     http-client,
     http-types,
-    monad-control == 0.3.3.0,
     network,
     stm,
     text,
