@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                eureka-client
-version:             0.5.0.0
+version:             0.5.0.1
 synopsis:            a Eureka client library for Haskell
 -- description:
 license:             Apache-2.0
@@ -19,7 +19,12 @@ library
   exposed-modules:
     Network.Eureka
   other-modules:
+    Network.Eureka.Application
+    Network.Eureka.Connection
+    Network.Eureka.Metadata
+    Network.Eureka.Request
     Network.Eureka.Types
+    Network.Eureka.Util
 
   -- other-extensions:
   build-depends:
@@ -31,7 +36,6 @@ library
     hslogger,
     http-client,
     http-types,
-    monad-control == 0.3.3.0,
     network,
     stm,
     text,
