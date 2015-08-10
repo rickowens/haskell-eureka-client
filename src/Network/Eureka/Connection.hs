@@ -30,7 +30,7 @@ import           Network.BSD               (getHostName)
 import           Network.HTTP.Client       (HttpException,
                                             Manager, Request (checkStatus, method, requestBody, requestHeaders),
                                             RequestBody (RequestBodyLBS),
-                                            defaultManagerSettings,  newManager,
+                                            defaultManagerSettings, newManager,
                                             queryString, responseStatus,
                                             withResponse)
 import           Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
