@@ -30,8 +30,8 @@ import           Network.BSD               (getHostName)
 import           Network.HTTP.Client       (HttpException,
                                             Manager, Request (checkStatus, method, requestBody, requestHeaders),
                                             RequestBody (RequestBodyLBS),
-                                            defaultManagerSettings, queryString,
-                                            responseStatus, withManager,
+                                            defaultManagerSettings,  newManager,
+                                            queryString, responseStatus,
                                             withResponse)
 import           Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
 import           Network.HTTP.Types.Status (status404)
@@ -141,8 +141,8 @@ connectEureka manager
 
 withEureka :: EurekaConfig -> InstanceConfig -> DataCenterInfo
            -> (EurekaConnection -> IO a) -> IO a
-withEureka eConfig iConfig iInfo m =
-  withManager defaultManagerSettings $ \manager ->
+withEureka eConfig iConfig iInfo m = do
+  manager <- newManager defaultManagerSettings
   bracket (connectEureka manager eConfig iConfig iInfo) disconnectEureka registerAndRun
   where
     registerAndRun eConn = do

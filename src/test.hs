@@ -11,7 +11,7 @@ import Network.Eureka (withEureka,
 import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
-import Network.HTTP.Client (defaultManagerSettings, withManager)
+import Network.HTTP.Client (defaultManagerSettings, newManager)
 import System.Environment (getArgs)
 import System.IO (stdout)
 import System.Log.Formatter (simpleLogFormatter)
@@ -29,7 +29,7 @@ main = do
     let handlers = [console]
     updateGlobalLogger "" (setLevel level . setHandlers handlers)
 
-    dataCenterInfo <- withManager defaultManagerSettings discoverDataCenterAmazon
+    dataCenterInfo <- newManager defaultManagerSettings >>= discoverDataCenterAmazon
     withEureka
         (myEurekaConfig commandLineServer)
         myInstanceConfig
