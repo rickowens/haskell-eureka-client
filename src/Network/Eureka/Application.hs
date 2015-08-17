@@ -3,6 +3,7 @@
 
 module Network.Eureka.Application (
     lookupByAppName
+  , lookupByAppNameAll
   , lookupAllApplications
   ) where
 
@@ -18,13 +19,20 @@ import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Vector               as V
 import           Network.HTTP.Client       (responseBody, httpLbs, Request(requestHeaders))
 
-import Network.Eureka.Types (InstanceInfo(..), EurekaConnection(..))
+import Network.Eureka.Types (InstanceInfo(..), EurekaConnection(..), InstanceStatus(..))
 import Network.Eureka.Util (parseUrlWithAdded)
 import Network.Eureka.Request (makeRequest)
 
-
+-- | Look up instance information for the given App Name.
+-- NOTE: Only returns the instances which are up.
 lookupByAppName :: EurekaConnection -> String -> IO [InstanceInfo]
-lookupByAppName eConn@EurekaConnection { eConnManager } appName = do
+lookupByAppName c n = filter isUp <$> lookupByAppNameAll c n
+  where
+    isUp = (==) Up . instanceInfoStatus
+
+-- | Like @lookupByAppName@, but returns all instances, even DOWN and OUT_OF_SERVICE.
+lookupByAppNameAll :: EurekaConnection -> String -> IO [InstanceInfo]
+lookupByAppNameAll eConn@EurekaConnection { eConnManager } appName = do
     result <- makeRequest eConn getByAppName
     either error (return . applicationInstanceInfos) result
   where
