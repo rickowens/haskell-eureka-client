@@ -41,6 +41,10 @@ import           Network.Socket            (AddrInfo (addrAddress, addrFamily),
                                             defaultHints, getAddrInfo,
                                             getNameInfo)
 import           System.Log.Logger         (debugM, errorM, infoM)
+import           System.Posix.Signals      (Handler (Catch),
+                                            installHandler,
+                                            sigTERM, sigINT,
+                                            raiseSignal)
 
 
 import           Network.Eureka.Types      (EurekaConnection(..),
@@ -143,6 +147,9 @@ withEureka :: EurekaConfig -> InstanceConfig -> DataCenterInfo
            -> (EurekaConnection -> IO a) -> IO a
 withEureka eConfig iConfig iInfo m = do
   manager <- newManager defaultManagerSettings
+  -- Handle sigTERM calls as sigINT calls since `bracket`/ghc doesn't
+  -- seem to handle sigTERM correctly (or maybe it is correct?)
+  installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
   bracket (connectEureka manager eConfig iConfig iInfo) disconnectEureka registerAndRun
   where
     registerAndRun eConn = do
