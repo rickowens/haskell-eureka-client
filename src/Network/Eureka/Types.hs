@@ -291,7 +291,7 @@ instance Default InstanceConfig where
     }
 
 data InstanceStatus = Up | Down | Starting | OutOfService | Unknown
-                    deriving Show
+                    deriving (Show, Eq)
 
 toNetworkName :: InstanceStatus -> String
 toNetworkName Up = "UP"
