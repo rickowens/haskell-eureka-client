@@ -6,6 +6,7 @@ module Network.Eureka.Connection (
   , connectEureka
   , disconnectEureka
   , withEureka
+  , withEurekaH
   , registerInstance
   , unregister
   , updateInstanceInfo
@@ -22,6 +23,7 @@ import           Control.Monad             (when)
 import           Control.Monad.Fix         (mfix)
 import           Data.Aeson                (encode, object, (.=))
 import           Data.Default              (def)
+import           Data.Functor              (void)
 import           Data.List                 (find)
 import           Data.Maybe                (fromJust, fromMaybe, isNothing)
 import qualified Data.Text                 as T
@@ -143,18 +145,36 @@ connectEureka manager
               checkStatus = \_ _ _ -> Nothing   -- so we can reregister if we get a 404
               }
 
-withEureka :: EurekaConfig -> InstanceConfig -> DataCenterInfo
-           -> (EurekaConnection -> IO a) -> IO a
-withEureka eConfig iConfig iInfo m = do
-  manager <- newManager defaultManagerSettings
-  -- Handle sigTERM calls as sigINT calls since `bracket`/ghc doesn't
-  -- seem to handle sigTERM correctly (or maybe it is correct?)
-  installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
-  bracket (connectEureka manager eConfig iConfig iInfo) disconnectEureka registerAndRun
+-- | Run an action inside of an Eureka context.
+-- This function registers the currently running instance with Eureka,
+-- it then passes the Eureka information into the action.
+-- After the action is completed (or crashes), deregister from Eureka.
+withEurekaH :: Bool
+            -- ^ Whether to switch sigTERM into sigINT. If this is not done, the user
+            -- must handle Eureka's resource cleaning in the case of sigTERM since ghc
+            -- doesn't raise an exception for sigTERM. See:
+            -- <https://ghc.haskell.org/trac/ghc/ticket/6113#comment:1>
+            -> EurekaConfig
+            -- ^ The Eureka configuration
+            -> InstanceConfig
+            -- ^ The instance configuration
+            -> DataCenterInfo
+            -> (EurekaConnection -> IO a)
+            -- ^ The action that will run inside the Eureka context.
+            -> IO a
+withEurekaH useTermHandle eConfig iConfig iInfo m = do
+    manager <- newManager defaultManagerSettings
+    when (useTermHandle) . void $ installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
+    bracket (connectEureka manager eConfig iConfig iInfo) disconnectEureka registerAndRun
   where
     registerAndRun eConn = do
         registerInstance eConn
         m eConn
+
+-- | Like 'withEurekaH' but overloaded to convert sigTERM into sigINT
+withEureka :: EurekaConfig -> InstanceConfig -> DataCenterInfo
+           -> (EurekaConnection -> IO a) -> IO a
+withEureka = withEurekaH True
 
 registerInstance :: EurekaConnection -> IO ()
 registerInstance eConn@EurekaConnection { eConnManager,
