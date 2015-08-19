@@ -164,7 +164,7 @@ withEurekaH :: Bool
             -> IO a
 withEurekaH useTermHandle eConfig iConfig iInfo m = do
     manager <- newManager defaultManagerSettings
-    when (useTermHandle) . void $ installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
+    when useTermHandle . void $ installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
     bracket (connectEureka manager eConfig iConfig iInfo) disconnectEureka registerAndRun
   where
     registerAndRun eConn = do
