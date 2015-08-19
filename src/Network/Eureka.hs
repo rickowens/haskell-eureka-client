@@ -1,6 +1,7 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Network.Eureka (
+  withEurekaH,
   withEureka,
   EurekaConfig(..),
   InstanceConfig(..),
@@ -36,7 +37,7 @@ import           Network.Eureka.Types      (AmazonDataCenterInfo (..),
 import           Network.HTTP.Client       (Manager, responseBody, parseUrl, httpLbs)
 
 import Network.Eureka.Application (lookupByAppName, lookupAllApplications)
-import Network.Eureka.Connection (withEureka, setStatus, EurekaConnection)
+import Network.Eureka.Connection (withEureka, withEurekaH, setStatus, EurekaConnection)
 import Network.Eureka.Metadata (addMetadata, lookupMetadata)
 
 -- | Interrogate the magical URL http://169.254.169.254/latest/meta-data to
