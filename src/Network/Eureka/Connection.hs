@@ -76,12 +76,13 @@ connectEureka manager
   iConfig@InstanceConfig{
       instanceLeaseRenewalInterval=heartbeatInterval
       , instanceEnabledOnInit
+      , instanceHostName
       } dataCenterInfo = mfix $ \econn -> do
   heartbeatThreadId <- forkIO $ heartbeatThread econn ()
   instanceInfoThreadId <- forkIO $ instanceInfoThread econn def
   statusVar <- atomically $ newTVar (if instanceEnabledOnInit then Up else Starting)
 
-  hostname <- getHostName
+  hostname <- maybe getHostName return instanceHostName
   hostResolved <- getAddrInfo (Just myHints) (Just hostname) Nothing
   (Just hostIpv4, _) <- getNameInfo [NI_NUMERICHOST] True False
                         . addrAddress . head $ hostResolved
