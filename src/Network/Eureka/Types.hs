@@ -107,6 +107,9 @@ data InstanceConfig = InstanceConfig {
       -- ^ A possible override for the "virtual hostname" or VIP that you should
       -- use to access this instance securely. This hostname should have the
       -- form "hostname:port". If Nothing, just use hostname + secure port.
+    , instanceHostName :: Maybe HostName
+      -- ^ The machine's hostname.
+      -- If Nothing, use getHostName from Network.BSD.
     , instanceStatusPageUrl :: Maybe String
       -- ^ URL to use to access this instance's status page.
     , instanceHomePageUrl :: String
@@ -284,6 +287,7 @@ instance Default InstanceConfig where
     , instanceSecurePort = 443
     , instanceVirtualHostname = Nothing
     , instanceSecureVirtualHostname = Nothing
+    , instanceHostName = Nothing
     , instanceStatusPageUrl = Nothing
     , instanceHomePageUrl = ""
     , instanceMetadata = Map.empty
