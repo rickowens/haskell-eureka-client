@@ -8,6 +8,7 @@ module Network.Eureka.Application (
   ) where
 
 import           Control.Applicative       ((<$>))
+import           Control.Exception         (catchJust)
 import           Control.Monad             (mzero)
 import           Data.Aeson                (FromJSON (parseJSON),
                                             Value (Object, Array), eitherDecode,
@@ -17,7 +18,8 @@ import           Data.Map                  (Map)
 import qualified Data.Map                  as Map
 import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Vector               as V
-import           Network.HTTP.Client       (responseBody, httpLbs, Request(requestHeaders))
+import           Network.HTTP.Client       (responseBody, httpLbs, Request(requestHeaders), HttpException(StatusCodeException))
+import           Network.HTTP.Types.Status (Status(Status))
 
 import Network.Eureka.Types (InstanceInfo(..), EurekaConnection(..), InstanceStatus(..))
 import Network.Eureka.Util (parseUrlWithAdded)
@@ -36,10 +38,17 @@ lookupByAppNameAll eConn@EurekaConnection { eConnManager } appName = do
     result <- makeRequest eConn getByAppName
     either error (return . applicationInstanceInfos) result
   where
-    getByAppName url = do
-        response <- eitherDecode . responseBody <$> httpLbs (request url) eConnManager
-        return $ parseEither (.: "application") =<< response
+    getByAppName url =
+      catchJust
+        only404s
+        (do
+          response <- eitherDecode . responseBody <$> httpLbs (request url) eConnManager
+          return $ parseEither (.: "application") =<< response
+        )
+        (return . const (Right $ Application "" []))
     request url = requestJSON $ parseUrlWithAdded url $ "apps/" ++ appName
+    only404s e@(StatusCodeException (Status 404 _) _ _) = Just e
+    only404s _ = Nothing
 
 {- |
   Returns all instances of all applications that eureka knows about,
