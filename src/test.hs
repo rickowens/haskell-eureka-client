@@ -1,13 +1,9 @@
 import Network.Eureka (withEureka,
     EurekaConfig(eurekaInstanceInfoReplicationInterval, eurekaRegion,
-                 eurekaServerServiceUrls),
-    InstanceConfig(instanceAppName, instanceLeaseRenewalInterval,
-                   instanceMetadata),
-    InstanceStatus(OutOfService),
-    def,
-    discoverDataCenterAmazon,
-    lookupByAppName,
-    setStatus, DataCenterInfo(DataCenterAmazon))
+    eurekaServerServiceUrls), InstanceConfig(instanceAppName,
+    instanceLeaseRenewalInterval, instanceMetadata),
+    InstanceStatus(OutOfService), def, discoverDataCenterAmazon,
+    lookupByAppName, setStatus, DataCenterInfo(DataCenterAmazon))
 import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)

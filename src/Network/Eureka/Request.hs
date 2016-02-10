@@ -21,9 +21,11 @@ import           Network.Eureka.Types      (EurekaConnection(..),
 -- | Make a request of each of the available servers. In case a server fails,
 -- try consecutive servers until one works (or we run out of servers). If all
 -- servers fail, throw the last exception we got.
-makeRequest :: EurekaConnection -> (String -> IO a) -> IO a
-makeRequest conn@EurekaConnection {eConnEurekaConfig}
-    action = do
+makeRequest
+  :: EurekaConnection
+  -> (String -> IO a)
+  -> IO a
+makeRequest conn@EurekaConnection {eConnEurekaConfig} action = do
     result <- foldM tryNext (Left HandshakeFailed) urls
     case result of
         Left bad -> throw bad

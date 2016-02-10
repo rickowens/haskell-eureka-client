@@ -29,12 +29,13 @@ import           Data.Maybe                (fromJust, fromMaybe, isNothing)
 import qualified Data.Text                 as T
 import           Data.Text.Encoding        (encodeUtf8)
 import           Network.BSD               (getHostName)
-import           Network.HTTP.Client       (HttpException,
-                                            Manager, Request (checkStatus, method, requestBody, requestHeaders),
+import           Network.HTTP.Client       (HttpException, Manager,
+                                            Request (checkStatus, method,
+                                            requestBody, requestHeaders),
                                             RequestBody (RequestBodyLBS),
-                                            defaultManagerSettings, newManager,
-                                            queryString, responseStatus,
-                                            withResponse)
+                                            defaultManagerSettings,
+                                            newManager, queryString,
+                                            responseStatus, withResponse)
 import           Network.HTTP.Types.Method (methodDelete, methodPost, methodPut)
 import           Network.HTTP.Types.Status (status404)
 import           Network.Socket            (AddrInfo (addrAddress, addrFamily),
@@ -70,33 +71,38 @@ connectEureka :: Manager
               -> EurekaConfig -> InstanceConfig -> DataCenterInfo
               -> IO EurekaConnection
 connectEureka manager
-  eConfig@EurekaConfig{
-      eurekaInstanceInfoReplicationInterval=instanceInfoInterval
-      }
-  iConfig@InstanceConfig{
-      instanceLeaseRenewalInterval=heartbeatInterval
-      , instanceEnabledOnInit
-      , instanceHostName
-      } dataCenterInfo = mfix $ \econn -> do
-  heartbeatThreadId <- forkIO $ heartbeatThread econn ()
-  instanceInfoThreadId <- forkIO $ instanceInfoThread econn def
-  statusVar <- atomically $ newTVar (if instanceEnabledOnInit then Up else Starting)
+    eConfig@EurekaConfig{
+        eurekaInstanceInfoReplicationInterval=instanceInfoInterval
+        }
+    iConfig@InstanceConfig{
+        instanceLeaseRenewalInterval=heartbeatInterval
+        , instanceEnabledOnInit
+        , instanceHostName
+        } dataCenterInfo
+  =
+    mfix $ \econn -> do
+      heartbeatThreadId <- forkIO $ heartbeatThread econn ()
+      instanceInfoThreadId <- forkIO $ instanceInfoThread econn def
+      statusVar <- atomically $ newTVar (if instanceEnabledOnInit then Up else Starting)
 
-  hostname <- maybe getHostName return instanceHostName
-  hostResolved <- getAddrInfo (Just myHints) (Just hostname) Nothing
-  (Just hostIpv4, _) <- getNameInfo [NI_NUMERICHOST] True False
-                        . addrAddress . head $ hostResolved
-  return EurekaConnection {
-        eConnEurekaConfig = eConfig
-      , eConnInstanceConfig = iConfig
-      , eConnHeartbeatThread = heartbeatThreadId
-      , eConnInstanceInfoReplicatorThread = instanceInfoThreadId
-      , eConnManager = manager
-      , eConnDataCenterInfo = dataCenterInfo
-      , eConnHostname = hostname
-      , eConnHostIpv4 = hostIpv4
-      , eConnStatus = statusVar
-      }
+      hostname <- maybe getHostName return instanceHostName
+      hostResolved <- getAddrInfo (Just myHints) (Just hostname) Nothing
+      (Just hostIpv4, _) <-
+        getNameInfo [NI_NUMERICHOST] True False
+        . addrAddress
+        . head
+        $ hostResolved
+      return EurekaConnection {
+            eConnEurekaConfig = eConfig
+          , eConnInstanceConfig = iConfig
+          , eConnHeartbeatThread = heartbeatThreadId
+          , eConnInstanceInfoReplicatorThread = instanceInfoThreadId
+          , eConnManager = manager
+          , eConnDataCenterInfo = dataCenterInfo
+          , eConnHostname = hostname
+          , eConnHostIpv4 = hostIpv4
+          , eConnStatus = statusVar
+          }
   where
     heartbeatThread :: EurekaConnection -> () -> IO ()
     heartbeatThread = repeating heartbeatInterval . postHeartbeat
@@ -114,7 +120,10 @@ connectEureka manager
             threadDelay (i * 1000 * 1000)
             loop result
 
-    postHeartbeat :: EurekaConnection -> HeartbeatState -> IO HeartbeatState
+    postHeartbeat
+      :: EurekaConnection
+      -> HeartbeatState
+      -> IO HeartbeatState
     postHeartbeat eConn@EurekaConnection {
         eConnInstanceConfig = InstanceConfig { instanceAppName },
         eConnManager
@@ -127,16 +136,16 @@ connectEureka manager
         case result of
             Right _ -> return ()
             Left err -> let errMsg = show (err :: SomeException) in
-                errorM "Eureka.postHeartbeat" $
-                appPath ++ " - was unable to send heartbeat! " ++ errMsg
+                errorM "Eureka.postHeartbeat"
+                    $ appPath ++ " - was unable to send heartbeat! " ++ errMsg
       where
         reallyPostHeartbeat = do
             responseStatus <- makeRequest eConn sendHeartbeat
-            debugM "Eureka.postHeartbeat" $
-                appPath ++ " - Heartbeat status: " ++ show responseStatus
+            debugM "Eureka.postHeartbeat"
+                $ appPath ++ " - Heartbeat status: " ++ show responseStatus
             when (responseStatus == status404) $ do
-                infoM "Eureka.postHeartbeat" $
-                    appPath ++ " - Re-registering apps/" ++ instanceAppName
+                infoM "Eureka.postHeartbeat"
+                    $ appPath ++ " - Re-registering apps/" ++ instanceAppName
                 registerInstance eConn
         appPath = eConnAppPath eConn
         sendHeartbeat url = withResponse (heartbeatRequest url) eConnManager $
@@ -166,15 +175,22 @@ withEurekaH :: Bool
 withEurekaH useTermHandle eConfig iConfig iInfo m = do
     manager <- newManager defaultManagerSettings
     when useTermHandle . void $ installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
-    bracket (connectEureka manager eConfig iConfig iInfo) disconnectEureka registerAndRun
+    bracket
+      (connectEureka manager eConfig iConfig iInfo)
+      disconnectEureka
+      registerAndRun
   where
     registerAndRun eConn = do
         registerInstance eConn
         m eConn
 
 -- | Like 'withEurekaH' but overloaded to convert sigTERM into sigINT
-withEureka :: EurekaConfig -> InstanceConfig -> DataCenterInfo
-           -> (EurekaConnection -> IO a) -> IO a
+withEureka
+  :: EurekaConfig
+  -> InstanceConfig
+  -> DataCenterInfo
+  -> (EurekaConnection -> IO a)
+  -> IO a
 withEureka = withEurekaH True
 
 registerInstance :: EurekaConnection -> IO ()
@@ -197,12 +213,17 @@ registerInstance eConn@EurekaConnection { eConnManager,
         }
 
     -- | Read the instance's status and use it to produce an InstanceInfo.
-    readEConnInstanceInfo :: EurekaConnection -> IO InstanceInfo
+    readEConnInstanceInfo
+      :: EurekaConnection
+      -> IO InstanceInfo
     readEConnInstanceInfo conn = eConnInstanceInfo conn <$> readStatus conn
 
 -- | A helper function to read the instance's status.
-readStatus :: EurekaConnection -> IO InstanceStatus
-readStatus EurekaConnection { eConnStatus } = atomically (readTVar eConnStatus)
+readStatus
+  :: EurekaConnection
+  -> IO InstanceStatus
+readStatus EurekaConnection { eConnStatus } =
+  atomically (readTVar eConnStatus)
 
 unregister :: EurekaConnection -> IO ()
 unregister eConn@EurekaConnection { eConnManager } = do
@@ -215,15 +236,15 @@ unregister eConn@EurekaConnection { eConnManager } = do
   case result of
       Right _ -> return ()
       Left err -> let errMsg = show (err :: SomeException) in
-          errorM "Eureka.unregister" $
-          appPath ++ " - de-registration failed " ++ errMsg
+          errorM "Eureka.unregister"
+              $ appPath ++ " - de-registration failed " ++ errMsg
   where
     reallyUnregister = do
         responseStatus <- makeRequest eConn sendUnregister
         -- the two spaces between "deregister" and "status" are copied from the
         -- Java implementation
-        infoM "Eureka.unregister" $
-                appPath ++ " - deregister  status: " ++ show responseStatus
+        infoM "Eureka.unregister"
+            $ appPath ++ " - deregister  status: " ++ show responseStatus
     appPath = eConnAppPath eConn
     sendUnregister url = withResponse (unregisterRequest url) eConnManager $
                         \resp -> return $ responseStatus resp
@@ -232,7 +253,10 @@ unregister eConn@EurekaConnection { eConnManager } = do
           }
 
 
-updateInstanceInfo :: EurekaConnection -> IIRState -> IO IIRState
+updateInstanceInfo
+  :: EurekaConnection
+  -> IIRState
+  -> IO IIRState
 updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
   eurekaServer <- getCoordinatingServer
   maybe (return oldState) updateDiscoveryServer eurekaServer
@@ -244,8 +268,7 @@ updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
         -- 'null' response. Here we can hit a 404 and die. Let's just replicate
         -- the silent failure of the Java version.
         eInstances <- try (lookupByAppName eConn discoveryAppId)
-                      :: IO (Either HttpException [InstanceInfo])
-        return $ case eInstances of
+        return $ case eInstances :: Either HttpException [InstanceInfo] of
             Left _ -> Nothing
             Right instances -> find coordinator instances
 
@@ -257,12 +280,16 @@ updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
             (return oldState { iirLastAMIId = mnewAMI })
             (checkDiscoveryServerChanged mnewAMI) iirLastAMIId
 
-    checkDiscoveryServerChanged :: Maybe String -> String -> IO IIRState
+    checkDiscoveryServerChanged
+      :: Maybe String
+      -> String
+      -> IO IIRState
     checkDiscoveryServerChanged mnewAMI lastAMI =
         if isNothing mnewAMI || mnewAMI == Just lastAMI
             then return oldState
             else do
-            infoM "Eureka.updateInstanceInfo" $ "The eureka AMI ID changed from "
+            infoM "Eureka.updateInstanceInfo"
+                $ "The eureka AMI ID changed from "
                 ++ lastAMI ++ " to " ++ fromJust mnewAMI
                 ++ ". Pushing the appinfo to eureka"
 
@@ -276,7 +303,8 @@ updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
             -- here. We don't support mutable metadata yet either. Finally, we
             -- don't support health checks. In other words, this log message is
             -- a little redundant.
-            infoM "Eureka.updateInstanceInfo" $ eConnAppPath eConn
+            infoM "Eureka.updateInstanceInfo"
+                $ eConnAppPath eConn
                 ++ " - retransmit instance info with status "
                 ++ show status
             registerInstance eConn

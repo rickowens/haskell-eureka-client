@@ -27,13 +27,19 @@ import Network.Eureka.Request (makeRequest)
 
 -- | Look up instance information for the given App Name.
 -- NOTE: Only returns the instances which are up.
-lookupByAppName :: EurekaConnection -> String -> IO [InstanceInfo]
+lookupByAppName
+  :: EurekaConnection
+  -> String
+  -> IO [InstanceInfo]
 lookupByAppName c n = filter isUp <$> lookupByAppNameAll c n
   where
     isUp = (==) Up . instanceInfoStatus
 
 -- | Like @lookupByAppName@, but returns all instances, even DOWN and OUT_OF_SERVICE.
-lookupByAppNameAll :: EurekaConnection -> String -> IO [InstanceInfo]
+lookupByAppNameAll
+  :: EurekaConnection
+  -> String
+  -> IO [InstanceInfo]
 lookupByAppNameAll eConn@EurekaConnection { eConnManager } appName = do
     result <- makeRequest eConn getByAppName
     either error (return . applicationInstanceInfos) result
@@ -54,7 +60,9 @@ lookupByAppNameAll eConn@EurekaConnection { eConnManager } appName = do
   Returns all instances of all applications that eureka knows about,
   arranged by application name.
 -}
-lookupAllApplications :: EurekaConnection -> IO (Map String [InstanceInfo])
+lookupAllApplications
+  :: EurekaConnection
+  -> IO (Map String [InstanceInfo])
 lookupAllApplications eConn@EurekaConnection {eConnManager} = do
     result <- makeRequest eConn getAllApps
     either error (return . toAppMap) result
