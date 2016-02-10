@@ -10,6 +10,7 @@ module Network.Eureka.Application (
 import           Control.Applicative       ((<$>))
 import           Control.Exception         (catchJust)
 import           Control.Monad             (mzero)
+import           Control.Monad.Logger      (MonadLoggerIO)
 import           Data.Aeson                (FromJSON (parseJSON),
                                             Value (Object, Array), eitherDecode,
                                             (.:))
@@ -27,19 +28,19 @@ import Network.Eureka.Request (makeRequest)
 
 -- | Look up instance information for the given App Name.
 -- NOTE: Only returns the instances which are up.
-lookupByAppName
-  :: EurekaConnection
+lookupByAppName :: (Functor io, MonadLoggerIO io)
+  => EurekaConnection
   -> String
-  -> IO [InstanceInfo]
+  -> io [InstanceInfo]
 lookupByAppName c n = filter isUp <$> lookupByAppNameAll c n
   where
     isUp = (==) Up . instanceInfoStatus
 
 -- | Like @lookupByAppName@, but returns all instances, even DOWN and OUT_OF_SERVICE.
-lookupByAppNameAll
-  :: EurekaConnection
+lookupByAppNameAll :: (MonadLoggerIO io)
+  => EurekaConnection
   -> String
-  -> IO [InstanceInfo]
+  -> io [InstanceInfo]
 lookupByAppNameAll eConn@EurekaConnection { eConnManager } appName = do
     result <- makeRequest eConn getByAppName
     either error (return . applicationInstanceInfos) result
@@ -60,9 +61,9 @@ lookupByAppNameAll eConn@EurekaConnection { eConnManager } appName = do
   Returns all instances of all applications that eureka knows about,
   arranged by application name.
 -}
-lookupAllApplications
-  :: EurekaConnection
-  -> IO (Map String [InstanceInfo])
+lookupAllApplications :: (MonadLoggerIO io)
+  => EurekaConnection
+  -> io (Map String [InstanceInfo])
 lookupAllApplications eConn@EurekaConnection {eConnManager} = do
     result <- makeRequest eConn getAllApps
     either error (return . toAppMap) result

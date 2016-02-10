@@ -1,5 +1,7 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Network.Eureka.Connection (
     EurekaConnection(..)
@@ -13,14 +15,21 @@ module Network.Eureka.Connection (
   , setStatus
   ) where
 
-import           Control.Applicative       ((<$>))
 import           Control.Concurrent        (forkIO, killThread,
                                             threadDelay)
 import           Control.Concurrent.STM    (atomically, newTVar, readTVar,
                                             writeTVar)
-import           Control.Exception         (SomeException, bracket, try)
-import           Control.Monad             (when)
+import           Control.Exception         (SomeException, try, Exception)
+import           Control.Monad             (when, liftM)
 import           Control.Monad.Fix         (mfix)
+import           Control.Monad.IO.Class    (liftIO)
+import           Control.Monad.Logger      (logInfo, logError, logDebug,
+                                            MonadLoggerIO, askLoggerIO,
+                                            runLoggingT, LoggingT)
+import           Control.Monad.Catch       (MonadThrow)
+import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Control.Monad.Trans.Resource (allocate, runResourceT)
 import           Data.Aeson                (encode, object, (.=))
 import           Data.Default              (def)
 import           Data.Functor              (void)
@@ -43,7 +52,6 @@ import           Network.Socket            (AddrInfo (addrAddress, addrFamily),
                                             NameInfoFlag (NI_NUMERICHOST),
                                             defaultHints, getAddrInfo,
                                             getNameInfo)
-import           System.Log.Logger         (debugM, errorM, infoM)
 import           System.Posix.Signals      (Handler (Catch),
                                             installHandler,
                                             sigTERM, sigINT,
@@ -67,9 +75,10 @@ import Network.Eureka.Application (lookupByAppName)
 
 type HeartbeatState = ()
 
-connectEureka :: Manager
+connectEureka :: (MonadLoggerIO io)
+              => Manager
               -> EurekaConfig -> InstanceConfig -> DataCenterInfo
-              -> IO EurekaConnection
+              -> io EurekaConnection
 connectEureka manager
     eConfig@EurekaConfig{
         eurekaInstanceInfoReplicationInterval=instanceInfoInterval
@@ -79,16 +88,18 @@ connectEureka manager
         , instanceEnabledOnInit
         , instanceHostName
         } dataCenterInfo
-  =
-    mfix $ \econn -> do
-      heartbeatThreadId <- forkIO $ heartbeatThread econn ()
-      instanceInfoThreadId <- forkIO $ instanceInfoThread econn def
-      statusVar <- atomically $ newTVar (if instanceEnabledOnInit then Up else Starting)
+  = do
+    logging <- askLoggerIO
+    liftIO . mfix $ \econn -> (`runLoggingT` logging) $ do
+      heartbeatThreadId <- forkL $ heartbeatThread econn ()
+      instanceInfoThreadId <- forkL $ instanceInfoThread econn def
+      statusVar <- liftIO . atomically $ newTVar (if instanceEnabledOnInit then Up else Starting)
 
-      hostname <- maybe getHostName return instanceHostName
-      hostResolved <- getAddrInfo (Just myHints) (Just hostname) Nothing
+      hostname <-liftIO $  maybe getHostName return instanceHostName
+      hostResolved <- liftIO $ getAddrInfo (Just myHints) (Just hostname) Nothing
       (Just hostIpv4, _) <-
-        getNameInfo [NI_NUMERICHOST] True False
+        liftIO
+        . getNameInfo [NI_NUMERICHOST] True False
         . addrAddress
         . head
         $ hostResolved
@@ -104,26 +115,27 @@ connectEureka manager
           , eConnStatus = statusVar
           }
   where
-    heartbeatThread :: EurekaConnection -> () -> IO ()
+    heartbeatThread :: (MonadLoggerIO io) => EurekaConnection -> () -> io ()
     heartbeatThread = repeating heartbeatInterval . postHeartbeat
     instanceInfoThread = repeating instanceInfoInterval . updateInstanceInfo
     myHints = defaultHints { addrFamily = AF_INET }
+    forkL io = liftIO . forkIO . runLoggingT io =<< askLoggerIO
 
     -- | Perform an action every 'delay' seconds.
     -- This action keeps track of its internal state using 'a'.
     -- Delays are not exact; we use threadDelay to schedule the repetition.
-    repeating :: Int -> (a -> IO a) -> a -> IO ()
+    repeating :: (MonadLoggerIO io) => Int -> (a -> io a) -> a -> io ()
     repeating i f = loop
       where
         loop a0 = do
             result <- f a0
-            threadDelay (i * 1000 * 1000)
+            liftIO $ threadDelay (i * 1000 * 1000)
             loop result
 
-    postHeartbeat
-      :: EurekaConnection
+    postHeartbeat :: (MonadLoggerIO io)
+      => EurekaConnection
       -> HeartbeatState
-      -> IO HeartbeatState
+      -> io HeartbeatState
     postHeartbeat eConn@EurekaConnection {
         eConnInstanceConfig = InstanceConfig { instanceAppName },
         eConnManager
@@ -132,19 +144,19 @@ connectEureka manager
         -- documentation under "Catching all exceptions". We use try instead of
         -- catch because we aren't interested in asynchronous exceptions, so
         -- hopefully this won't accidentally catch too many exceptions.
-        result <- try reallyPostHeartbeat
+        result <- tryL reallyPostHeartbeat
         case result of
             Right _ -> return ()
             Left err -> let errMsg = show (err :: SomeException) in
-                errorM "Eureka.postHeartbeat"
+                $(logError) . T.pack
                     $ appPath ++ " - was unable to send heartbeat! " ++ errMsg
       where
         reallyPostHeartbeat = do
             responseStatus <- makeRequest eConn sendHeartbeat
-            debugM "Eureka.postHeartbeat"
+            $(logDebug) . T.pack
                 $ appPath ++ " - Heartbeat status: " ++ show responseStatus
             when (responseStatus == status404) $ do
-                infoM "Eureka.postHeartbeat"
+                $(logInfo) . T.pack
                     $ appPath ++ " - Re-registering apps/" ++ instanceAppName
                 registerInstance eConn
         appPath = eConnAppPath eConn
@@ -159,7 +171,8 @@ connectEureka manager
 -- This function registers the currently running instance with Eureka,
 -- it then passes the Eureka information into the action.
 -- After the action is completed (or crashes), deregister from Eureka.
-withEurekaH :: Bool
+withEurekaH :: (MonadThrow io, MonadBaseControl IO io, MonadLoggerIO io)
+            => Bool
             -- ^ Whether to switch sigTERM into sigINT. If this is not done, the user
             -- must handle Eureka's resource cleaning in the case of sigTERM since ghc
             -- doesn't raise an exception for sigTERM. See:
@@ -169,31 +182,33 @@ withEurekaH :: Bool
             -> InstanceConfig
             -- ^ The instance configuration
             -> DataCenterInfo
-            -> (EurekaConnection -> IO a)
+            -> (EurekaConnection -> io a)
             -- ^ The action that will run inside the Eureka context.
-            -> IO a
+            -> io a
 withEurekaH useTermHandle eConfig iConfig iInfo m = do
-    manager <- newManager defaultManagerSettings
-    when useTermHandle . void $ installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
-    bracket
-      (connectEureka manager eConfig iConfig iInfo)
-      disconnectEureka
-      registerAndRun
+    manager <- liftIO $ newManager defaultManagerSettings
+    liftIO $ when useTermHandle . void $ installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
+    logging <- askLoggerIO
+    runResourceT $ do
+      (_, eConn) <- allocate
+        (flip runLoggingT logging $ connectEureka manager eConfig iConfig iInfo)
+        (flip runLoggingT logging . disconnectEureka)
+      registerAndRun eConn
   where
-    registerAndRun eConn = do
+    registerAndRun eConn = lift $ do
         registerInstance eConn
         m eConn
 
 -- | Like 'withEurekaH' but overloaded to convert sigTERM into sigINT
-withEureka
-  :: EurekaConfig
+withEureka :: (MonadThrow io, MonadBaseControl IO io, MonadLoggerIO io)
+  => EurekaConfig
   -> InstanceConfig
   -> DataCenterInfo
-  -> (EurekaConnection -> IO a)
-  -> IO a
+  -> (EurekaConnection -> io a)
+  -> io a
 withEureka = withEurekaH True
 
-registerInstance :: EurekaConnection -> IO ()
+registerInstance :: (MonadLoggerIO io) => EurekaConnection -> io ()
 registerInstance eConn@EurekaConnection { eConnManager,
       eConnInstanceConfig = InstanceConfig {instanceAppName}
   } = do
@@ -213,37 +228,37 @@ registerInstance eConn@EurekaConnection { eConnManager,
         }
 
     -- | Read the instance's status and use it to produce an InstanceInfo.
-    readEConnInstanceInfo
-      :: EurekaConnection
-      -> IO InstanceInfo
-    readEConnInstanceInfo conn = eConnInstanceInfo conn <$> readStatus conn
+    readEConnInstanceInfo :: (MonadLoggerIO io)
+      => EurekaConnection
+      -> io InstanceInfo
+    readEConnInstanceInfo conn = eConnInstanceInfo conn `liftM` readStatus conn
 
 -- | A helper function to read the instance's status.
-readStatus
-  :: EurekaConnection
-  -> IO InstanceStatus
+readStatus :: (MonadLoggerIO io)
+  => EurekaConnection
+  -> io InstanceStatus
 readStatus EurekaConnection { eConnStatus } =
-  atomically (readTVar eConnStatus)
+  liftIO $ atomically (readTVar eConnStatus)
 
-unregister :: EurekaConnection -> IO ()
+unregister :: (MonadLoggerIO io) => EurekaConnection -> io ()
 unregister eConn@EurekaConnection { eConnManager } = do
   -- N.B. This also catches all exceptions (see above), which the Java version
   -- does, presumably because unregistering could be something that happens as
   -- the instance crashes, and we don't want to mask the legitimate failure
   -- with some other frivolous failure that comes out of our failure to
   -- deregister.
-  result <- try reallyUnregister
+  result <- tryL reallyUnregister
   case result of
       Right _ -> return ()
       Left err -> let errMsg = show (err :: SomeException) in
-          errorM "Eureka.unregister"
+          $(logError) . T.pack
               $ appPath ++ " - de-registration failed " ++ errMsg
   where
     reallyUnregister = do
         responseStatus <- makeRequest eConn sendUnregister
         -- the two spaces between "deregister" and "status" are copied from the
         -- Java implementation
-        infoM "Eureka.unregister"
+        $(logInfo) . T.pack
             $ appPath ++ " - deregister  status: " ++ show responseStatus
     appPath = eConnAppPath eConn
     sendUnregister url = withResponse (unregisterRequest url) eConnManager $
@@ -253,42 +268,42 @@ unregister eConn@EurekaConnection { eConnManager } = do
           }
 
 
-updateInstanceInfo
-  :: EurekaConnection
+updateInstanceInfo :: (MonadLoggerIO io)
+  => EurekaConnection
   -> IIRState
-  -> IO IIRState
+  -> io IIRState
 updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
   eurekaServer <- getCoordinatingServer
   maybe (return oldState) updateDiscoveryServer eurekaServer
   where
-    getCoordinatingServer :: IO (Maybe InstanceInfo)
+    getCoordinatingServer :: (MonadLoggerIO io) => io (Maybe InstanceInfo)
     getCoordinatingServer = do
         -- N.B. The Java client does an in-memory lookup in a prepopulated hash
         -- rather than issuing the query itself. Failure there means getting a
         -- 'null' response. Here we can hit a 404 and die. Let's just replicate
         -- the silent failure of the Java version.
-        eInstances <- try (lookupByAppName eConn discoveryAppId)
+        eInstances <- tryL (lookupByAppName eConn discoveryAppId)
         return $ case eInstances :: Either HttpException [InstanceInfo] of
             Left _ -> Nothing
             Right instances -> find coordinator instances
 
     coordinator = instanceInfoIsCoordinatingDiscoveryServer
-    updateDiscoveryServer :: InstanceInfo -> IO IIRState
+    updateDiscoveryServer :: (MonadLoggerIO io) => InstanceInfo -> io IIRState
     updateDiscoveryServer eurekaServer = do
         let mnewAMI = maybeGetAMIId eurekaServer
         maybe
             (return oldState { iirLastAMIId = mnewAMI })
             (checkDiscoveryServerChanged mnewAMI) iirLastAMIId
 
-    checkDiscoveryServerChanged
-      :: Maybe String
-      -> String
-      -> IO IIRState
+    checkDiscoveryServerChanged :: (MonadLoggerIO io)
+        => Maybe String
+        -> String
+        -> io IIRState
     checkDiscoveryServerChanged mnewAMI lastAMI =
         if isNothing mnewAMI || mnewAMI == Just lastAMI
             then return oldState
             else do
-            infoM "Eureka.updateInstanceInfo"
+            $(logInfo) . T.pack
                 $ "The eureka AMI ID changed from "
                 ++ lastAMI ++ " to " ++ fromJust mnewAMI
                 ++ ". Pushing the appinfo to eureka"
@@ -303,7 +318,7 @@ updateInstanceInfo eConn oldState@IIRState { iirLastAMIId } = do
             -- here. We don't support mutable metadata yet either. Finally, we
             -- don't support health checks. In other words, this log message is
             -- a little redundant.
-            infoM "Eureka.updateInstanceInfo"
+            $(logInfo) . T.pack
                 $ eConnAppPath eConn
                 ++ " - retransmit instance info with status "
                 ++ show status
@@ -436,18 +451,18 @@ interpolateInstanceUrl eConn instanceUrl =
     (T.pack (eConnPublicHostname eConn))
     (T.pack instanceUrl)
 
-disconnectEureka :: EurekaConnection -> IO ()
+disconnectEureka :: (MonadLoggerIO io) => EurekaConnection -> io ()
 disconnectEureka eConn@EurekaConnection {
     eConnHeartbeatThread, eConnInstanceInfoReplicatorThread
     } = do
-    killThread eConnHeartbeatThread
-    killThread eConnInstanceInfoReplicatorThread
+    liftIO $ killThread eConnHeartbeatThread
+    liftIO $ killThread eConnInstanceInfoReplicatorThread
     setStatus eConn Down
     unregister eConn
 
-setStatus :: EurekaConnection -> InstanceStatus -> IO ()
+setStatus :: (MonadLoggerIO io) => EurekaConnection -> InstanceStatus -> io ()
 setStatus eConn@EurekaConnection { eConnManager, eConnStatus } newStatus = do
-    atomically $ writeTVar eConnStatus newStatus
+    liftIO . atomically $ writeTVar eConnStatus newStatus
     makeRequest eConn updateStatus
   where
     updateStatus url = withResponse (statusRequest url) eConnManager $ \_ ->
@@ -456,3 +471,11 @@ setStatus eConn@EurekaConnection { eConnManager, eConnStatus } newStatus = do
           method = methodPut
         , queryString = encodeUtf8 . T.pack $ "value=" ++ toNetworkName newStatus
         }
+
+{- |
+  A monadlogging version of try.
+-}
+tryL :: (MonadLoggerIO io, Exception e) => LoggingT IO a -> io (Either e a)
+tryL io = liftIO . try . runLoggingT io =<< askLoggerIO
+
+

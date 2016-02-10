@@ -6,6 +6,8 @@ module Network.Eureka.Request (
 
 import           Control.Exception         (throw, try)
 import           Control.Monad             (foldM)
+import           Control.Monad.IO.Class    (liftIO)
+import           Control.Monad.Logger      (MonadLoggerIO)
 import           Data.List                 (elemIndex, find, nub)
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromJust, fromMaybe)
@@ -21,11 +23,11 @@ import           Network.Eureka.Types      (EurekaConnection(..),
 -- | Make a request of each of the available servers. In case a server fails,
 -- try consecutive servers until one works (or we run out of servers). If all
 -- servers fail, throw the last exception we got.
-makeRequest
-  :: EurekaConnection
+makeRequest :: (MonadLoggerIO io)
+  => EurekaConnection
   -> (String -> IO a)
-  -> IO a
-makeRequest conn@EurekaConnection {eConnEurekaConfig} action = do
+  -> io a
+makeRequest conn@EurekaConnection {eConnEurekaConfig} action = liftIO $ do
     result <- foldM tryNext (Left HandshakeFailed) urls
     case result of
         Left bad -> throw bad

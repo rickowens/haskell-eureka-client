@@ -4,38 +4,33 @@ import Network.Eureka (withEureka,
     instanceLeaseRenewalInterval, instanceMetadata),
     InstanceStatus(OutOfService), def, discoverDataCenterAmazon,
     lookupByAppName, setStatus, DataCenterInfo(DataCenterAmazon))
-import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Logger (runNoLoggingT)
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import System.Environment (getArgs)
-import System.IO (stdout)
-import System.Log.Formatter (simpleLogFormatter)
-import System.Log.Handler (setFormatter)
-import System.Log.Handler.Simple (streamHandler)
-import System.Log.Logger (setLevel, setHandlers, updateGlobalLogger, Priority(DEBUG))
 import qualified Data.Map as Map
 
 main :: IO ()
 main = do
     args <- getArgs
     let [commandLineServer] = args
-        level = DEBUG
-    console <- tweak <$> streamHandler stdout level
-    let handlers = [console]
-    updateGlobalLogger "" (setLevel level . setHandlers handlers)
 
     dataCenterInfo <- newManager defaultManagerSettings >>= discoverDataCenterAmazon
-    withEureka
+    runNoLoggingT $ withEureka
         (myEurekaConfig commandLineServer)
         myInstanceConfig
-        (DataCenterAmazon dataCenterInfo) $ \eConn -> do
+        (DataCenterAmazon dataCenterInfo)
+        (\eConn -> do
             result <- lookupByAppName eConn "FITBIT-SYNC-WORKER"
-            print result
-            replicateM_ 10 $ threadDelay $ 1000 * 1000
+            liftIO $ print result
+            replicateM_ 10  delay
             setStatus eConn OutOfService
-            replicateM_ 10 $ threadDelay $ 1000 * 1000
+            replicateM_ 10  delay
+          )
   where
+    delay = liftIO $ threadDelay (1000 * 1000)
     myEurekaConfig serverUrl = def {
         eurekaInstanceInfoReplicationInterval = 1,
         eurekaServerServiceUrls = Map.fromList [("default", [serverUrl])],
@@ -46,5 +41,3 @@ main = do
         instanceAppName = "haskell_eureka_test_app",
         instanceMetadata = Map.fromList [("testKey", "testValue")]
         }
-    tweak h = setFormatter h (simpleLogFormatter logFormat)
-    logFormat = "$prio [$tid] [$time] $loggername - $msg"
