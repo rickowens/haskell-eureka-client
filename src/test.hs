@@ -22,7 +22,7 @@ main = do
         (myEurekaConfig commandLineServer)
         myInstanceConfig
         (DataCenterAmazon dataCenterInfo)
-        (\eConn -> do
+        (\eConn -> runNoLoggingT $ do
             result <- lookupByAppName eConn "FITBIT-SYNC-WORKER"
             liftIO $ print result
             replicateM_ 10  delay

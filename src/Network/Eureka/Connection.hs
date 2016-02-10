@@ -1,7 +1,6 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Network.Eureka.Connection (
     EurekaConnection(..)
@@ -19,17 +18,14 @@ import           Control.Concurrent        (forkIO, killThread,
                                             threadDelay)
 import           Control.Concurrent.STM    (atomically, newTVar, readTVar,
                                             writeTVar)
-import           Control.Exception         (SomeException, try, Exception)
+import           Control.Exception         (SomeException, try, Exception,
+                                            bracket)
 import           Control.Monad             (when, liftM)
 import           Control.Monad.Fix         (mfix)
 import           Control.Monad.IO.Class    (liftIO)
 import           Control.Monad.Logger      (logInfo, logError, logDebug,
                                             MonadLoggerIO, askLoggerIO,
                                             runLoggingT, LoggingT)
-import           Control.Monad.Catch       (MonadThrow)
-import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.Control (MonadBaseControl)
-import           Control.Monad.Trans.Resource (allocate, runResourceT)
 import           Data.Aeson                (encode, object, (.=))
 import           Data.Default              (def)
 import           Data.Functor              (void)
@@ -171,7 +167,7 @@ connectEureka manager
 -- This function registers the currently running instance with Eureka,
 -- it then passes the Eureka information into the action.
 -- After the action is completed (or crashes), deregister from Eureka.
-withEurekaH :: (MonadThrow io, MonadBaseControl IO io, MonadLoggerIO io)
+withEurekaH :: (MonadLoggerIO io)
             => Bool
             -- ^ Whether to switch sigTERM into sigINT. If this is not done, the user
             -- must handle Eureka's resource cleaning in the case of sigTERM since ghc
@@ -182,29 +178,28 @@ withEurekaH :: (MonadThrow io, MonadBaseControl IO io, MonadLoggerIO io)
             -> InstanceConfig
             -- ^ The instance configuration
             -> DataCenterInfo
-            -> (EurekaConnection -> io a)
+            -> (EurekaConnection -> IO a)
             -- ^ The action that will run inside the Eureka context.
             -> io a
 withEurekaH useTermHandle eConfig iConfig iInfo m = do
     manager <- liftIO $ newManager defaultManagerSettings
     liftIO $ when useTermHandle . void $ installHandler sigTERM (Catch $ raiseSignal sigINT) Nothing
     logging <- askLoggerIO
-    runResourceT $ do
-      (_, eConn) <- allocate
-        (flip runLoggingT logging $ connectEureka manager eConfig iConfig iInfo)
-        (flip runLoggingT logging . disconnectEureka)
-      registerAndRun eConn
+    liftIO $ bracket
+      (flip runLoggingT logging $ connectEureka manager eConfig iConfig iInfo)
+      (flip runLoggingT logging . disconnectEureka)
+      (flip runLoggingT logging . registerAndRun)
   where
-    registerAndRun eConn = lift $ do
+    registerAndRun eConn = do
         registerInstance eConn
-        m eConn
+        liftIO $ m eConn
 
 -- | Like 'withEurekaH' but overloaded to convert sigTERM into sigINT
-withEureka :: (MonadThrow io, MonadBaseControl IO io, MonadLoggerIO io)
+withEureka :: (MonadLoggerIO io)
   => EurekaConfig
   -> InstanceConfig
   -> DataCenterInfo
-  -> (EurekaConnection -> io a)
+  -> (EurekaConnection -> IO a)
   -> io a
 withEureka = withEurekaH True
 
